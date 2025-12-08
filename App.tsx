@@ -61,25 +61,44 @@ export default function App() {
            let totalIncome = 0;
            let totalDiamondChance = 0;
            let extraScrap = 0;
-
-           // Iterate over all hunting birds
-           prev.huntingBirdIds.forEach(id => {
-               const hunter = prev.birds.find(b => b.instanceId === id);
-               if (hunter) {
-                   const rarityMult = RARITY_CONFIG[hunter.rarity].minMult;
-                   let baseIncome = (hunter.huntingConfig.baseRate * rarityMult) * (1 + (hunter.level * 0.1));
+           
+           let birdsUpdated = false;
+           // Iterate birds to apply passive XP or other individual updates
+           const updatedBirds = prev.birds.map(bird => {
+               if (prev.huntingBirdIds.includes(bird.instanceId)) {
+                   // Calculate Resource Yield (same as before but per bird)
+                   const rarityMult = RARITY_CONFIG[bird.rarity].minMult;
+                   let baseIncome = (bird.huntingConfig.baseRate * rarityMult) * (1 + (bird.level * 0.1));
                    
                    // Species-Specific Bonuses
-                   if (hunter.id === 'hummingbird') {
+                   if (bird.id === 'hummingbird') {
                         if (Math.random() < 0.10) baseIncome *= 2;
-                   } else if (hunter.id === 'hawk') {
+                   } else if (bird.id === 'hawk') {
                         if (Math.random() < 0.05) extraScrap += 1;
-                   } else if (hunter.id === 'owl') {
+                   } else if (bird.id === 'owl') {
                         baseIncome *= 1.1;
+                        
+                        // Passive XP for Owls
+                        const xpGain = Math.max(1, Math.floor(bird.level * 0.5));
+                        let newXp = bird.xp + xpGain;
+                        let newLevel = bird.level;
+                        let newXpToNext = bird.xpToNextLevel;
+
+                        while (newXp >= newXpToNext) {
+                            newXp -= newXpToNext;
+                            newLevel++;
+                            newXpToNext = Math.floor(XP_TABLE.BASE * Math.pow(newLevel, XP_TABLE.GROWTH_FACTOR));
+                        }
+                        
+                        if (newXp !== bird.xp || newLevel !== bird.level) {
+                            birdsUpdated = true;
+                            // Only update bird stats if we leveled up, otherwise just XP
+                            return { ...bird, xp: newXp, level: newLevel, xpToNextLevel: newXpToNext };
+                        }
                    }
                    
                    let diamondChance = 0;
-                   if (hunter.id === 'vulture') {
+                   if (bird.id === 'vulture') {
                        diamondChance += 0.005; 
                    }
 
@@ -95,12 +114,13 @@ export default function App() {
                            }
                        });
                    };
-                   addGemBuffs(hunter.gear.beak);
-                   addGemBuffs(hunter.gear.claws);
+                   addGemBuffs(bird.gear.beak);
+                   addGemBuffs(bird.gear.claws);
                    
                    totalIncome += baseIncome * (1 + (bonusPct / 100));
                    totalDiamondChance += diamondChance;
                }
+               return bird;
            });
            
            let diamondFound = 0;
@@ -112,7 +132,8 @@ export default function App() {
                ...prev,
                feathers: prev.feathers + totalIncome,
                scrap: prev.scrap + extraScrap,
-               diamonds: prev.diamonds + diamondFound
+               diamonds: prev.diamonds + diamondFound,
+               birds: birdsUpdated ? updatedBirds : prev.birds
            };
            localStorage.setItem('bird_game_save_v6', JSON.stringify(newState));
            return newState;
@@ -122,6 +143,7 @@ export default function App() {
   }, []);
 
   const handleStart = () => {
+     // Safety check for invalid state (e.g. invalid bird reference)
      if (!playerState.birds || playerState.birds.length === 0) {
          setScreen(GameScreen.CATCH);
      } else {
@@ -353,8 +375,6 @@ export default function App() {
                ...prev,
                feathers: prev.feathers + refundFeathers,
                scrap: prev.scrap + refundScrap
-               // If it was from preview, it's not in inventory, so no removal logic needed unless we support scrapping from inventory directly (which we do for gear)
-               // For now this is only called from Lab preview.
            };
       });
   };
@@ -542,154 +562,141 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white font-sans overflow-x-hidden">
+    <div className="bg-slate-950 text-white font-sans overflow-x-hidden">
       {screen === GameScreen.MENU && (
-         <div className="flex flex-col items-center justify-center min-h-screen relative overflow-hidden bg-slate-950">
-             {/* Dynamic Background */}
-             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,#0f172a_0%,#020617_100%)] z-0" />
+         <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-slate-950 relative overflow-hidden select-none touch-none">
              
-             {/* Hexagon Grid Pattern */}
-             <div className="absolute inset-0 opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/hexellence.png')] z-0 pointer-events-none" />
-
-             {/* Rotating Ring Container - Centered explicitly */}
-             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                 <motion.div 
-                    className="w-[600px] h-[600px] rounded-full border border-cyan-500/10 border-dashed"
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
-                 />
-             </div>
-             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <motion.div 
-                    className="w-[400px] h-[400px] rounded-full border border-cyan-500/20"
-                    animate={{ rotate: -360 }}
-                    transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
-                />
-             </div>
-
-             {/* Animated Grid Floor (Perspective) */}
-             <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-cyan-900/20 to-transparent perspective-[1000px] overflow-hidden opacity-30 pointer-events-none">
-                 <motion.div 
-                    className="w-[200%] h-[200%] -ml-[50%] bg-[linear-gradient(0deg,transparent_24%,rgba(6,182,212,0.3)_25%,rgba(6,182,212,0.3)_26%,transparent_27%,transparent_74%,rgba(6,182,212,0.3)_75%,rgba(6,182,212,0.3)_76%,transparent_77%,transparent),linear-gradient(90deg,transparent_24%,rgba(6,182,212,0.3)_25%,rgba(6,182,212,0.3)_26%,transparent_27%,transparent_74%,rgba(6,182,212,0.3)_75%,rgba(6,182,212,0.3)_76%,transparent_77%,transparent)] bg-[length:50px_50px]"
-                    style={{ transform: "rotateX(60deg)" }}
-                    animate={{ translateY: [0, 50] }}
-                    transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                 />
-             </div>
-
-             {/* Particles */}
-             {[...Array(30)].map((_, i) => (
-                <motion.div
-                    key={i}
-                    className="absolute w-0.5 h-0.5 bg-cyan-400 rounded-full"
-                    initial={{ x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight, opacity: 0 }}
-                    animate={{ 
-                        y: [null, Math.random() * -100], 
-                        opacity: [0, 0.8, 0],
-                    }}
-                    transition={{ 
-                        duration: 2 + Math.random() * 4, 
-                        repeat: Infinity, 
-                        delay: Math.random() * 2,
-                    }}
-                />
-             ))}
-
-             {/* Content Container */}
-             <div className="z-10 text-center relative max-w-4xl px-4 flex flex-col items-center justify-center pb-24 md:pb-0">
+             {/* --- BACKGROUND DECOR --- */}
+             <div className="absolute inset-0 z-0 pointer-events-none">
+                 {/* Deep Space Gradient */}
+                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#1e293b_0%,#020617_100%)] opacity-80" />
                  
-                 {/* Main Title Group */}
-                 <div className="mb-12 relative">
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        transition={{ duration: 1, ease: "easeOut" }}
-                        className="relative z-10"
-                    >
-                        {/* Glitch Effect Layers */}
-                        <h1 className="text-6xl md:text-9xl font-tech font-black tracking-tighter text-white relative z-10 mix-blend-screen">
-                            BIRD GAME
-                        </h1>
-                        <motion.h1 
-                            className="text-6xl md:text-9xl font-tech font-black tracking-tighter text-cyan-500 absolute top-0 left-0 z-0 opacity-50 mix-blend-screen"
-                            animate={{ x: [-2, 2, -1, 0], opacity: [0.5, 0.3, 0.5] }}
-                            transition={{ repeat: Infinity, duration: 0.2, repeatDelay: 3 }}
-                        >
-                            BIRD GAME
-                        </motion.h1>
-                        <motion.h1 
-                            className="text-6xl md:text-9xl font-tech font-black tracking-tighter text-rose-500 absolute top-0 left-0 z-0 opacity-50 mix-blend-screen"
-                            animate={{ x: [2, -2, 1, 0], opacity: [0.5, 0.3, 0.5] }}
-                            transition={{ repeat: Infinity, duration: 0.2, repeatDelay: 4 }}
-                        >
-                            BIRD GAME
-                        </motion.h1>
-                    </motion.div>
-
+                 {/* Hex Grid */}
+                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/hexellence.png')] opacity-[0.03]" />
+                 
+                 {/* Rotating Rings */}
+                 <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(120vw,800px)] h-[min(120vw,800px)] opacity-30">
+                     <motion.div 
+                        className="w-full h-full rounded-full border border-cyan-500/10 border-dashed"
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 120, repeat: Infinity, ease: "linear" }}
+                     />
+                 </div>
+                 <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(90vw,600px)] h-[min(90vw,600px)] opacity-40">
                     <motion.div 
-                        initial={{ opacity: 0, x: -50 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.5, duration: 0.5 }}
-                        className="flex items-center justify-center gap-4 mt-2"
-                    >
-                        <div className="h-px bg-cyan-500 w-12 md:w-24" />
-                        <span className="text-3xl md:text-5xl font-tech font-bold text-cyan-400 tracking-[0.2em]">III</span>
-                        <div className="h-px bg-cyan-500 w-12 md:w-24" />
-                    </motion.div>
+                        className="w-full h-full rounded-full border border-cyan-500/20"
+                        animate={{ rotate: -360 }}
+                        transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
+                    />
+                 </div>
+                 
+                 {/* Scanlines */}
+                 <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%] z-10 opacity-20" />
+             </div>
 
-                    <motion.p 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.8 }}
-                        className="text-slate-400 font-mono text-sm tracking-[0.5em] mt-4 uppercase"
+             {/* --- MAIN CONTENT CENTERED --- */}
+             <div className="relative z-20 flex flex-col items-center justify-between h-full py-20 md:justify-center md:gap-16 w-full max-w-md px-6">
+                 
+                 {/* Spacer for Mobile Vertical Balance */}
+                 <div className="flex-1 md:hidden" />
+
+                 {/* LOGO GROUP */}
+                 <div className="flex flex-col items-center justify-center w-full">
+                    {/* Title Container */}
+                    <div className="relative mb-6">
+                         <h1 className="text-7xl md:text-9xl font-tech font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400 text-center leading-[0.8] drop-shadow-2xl">
+                            BIRD<br/>GAME
+                        </h1>
+                        
+                        {/* Glitch Effect Layer 1 */}
+                        <motion.div 
+                            className="absolute inset-0 text-7xl md:text-9xl font-tech font-black tracking-tighter text-cyan-500 text-center leading-[0.8] opacity-60 mix-blend-screen pointer-events-none z-[-1]"
+                            animate={{ x: [-2, 3, -1, 0], opacity: [0, 0.8, 0] }}
+                            transition={{ repeat: Infinity, duration: 2, repeatDelay: 3 }}
+                        >
+                            BIRD<br/>GAME
+                        </motion.div>
+                        
+                         {/* Glitch Effect Layer 2 */}
+                        <motion.div 
+                            className="absolute inset-0 text-7xl md:text-9xl font-tech font-black tracking-tighter text-rose-500 text-center leading-[0.8] opacity-60 mix-blend-screen pointer-events-none z-[-1]"
+                            animate={{ x: [2, -3, 1, 0], opacity: [0, 0.8, 0] }}
+                            transition={{ repeat: Infinity, duration: 2.5, repeatDelay: 4 }}
+                        >
+                            BIRD<br/>GAME
+                        </motion.div>
+                    </div>
+
+                    {/* Subtitle / Version */}
+                    <motion.div 
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: 'auto' }}
+                        transition={{ delay: 0.5, duration: 0.5 }}
+                        className="flex flex-col items-center gap-4 w-full"
                     >
-                        Tactical Avian Combat
-                    </motion.p>
+                         <div className="flex items-center gap-4 w-full justify-center opacity-80">
+                            <div className="h-[1px] bg-gradient-to-l from-cyan-500/50 to-transparent w-16" />
+                            <span className="font-tech text-3xl md:text-4xl text-cyan-400 font-bold tracking-[0.2em] drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]">III</span>
+                            <div className="h-[1px] bg-gradient-to-r from-cyan-500/50 to-transparent w-16" />
+                         </div>
+
+                         <p className="font-mono text-[10px] md:text-xs text-slate-400 tracking-[0.3em] uppercase">
+                            Tactical Avian Combat
+                         </p>
+                    </motion.div>
                  </div>
 
-                 {/* Start Button */}
-                 <motion.button 
-                    onClick={handleStart} 
-                    initial={{ y: 50, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    transition={{ delay: 1.2 }}
-                    className="group relative px-20 py-6 bg-transparent overflow-hidden cursor-pointer z-50"
-                 >
-                     {/* Tech Border SVG */}
-                     <svg className="absolute inset-0 w-full h-full text-cyan-500/50 group-hover:text-cyan-400 transition-colors" viewBox="0 0 300 80" preserveAspectRatio="none">
-                         <path d="M0,0 L20,0 L30,10 L270,10 L280,0 L300,0 L300,60 L280,60 L270,70 L30,70 L20,60 L0,60 Z" fill="rgba(8,145,178,0.1)" stroke="currentColor" strokeWidth="1" />
-                     </svg>
+                 {/* Spacer for Mobile */}
+                 <div className="flex-[0.5] md:hidden" />
 
-                     <div className="relative z-10 flex flex-col items-center">
-                        <span className="font-black font-tech text-2xl text-white tracking-widest group-hover:text-cyan-200 transition-colors">INITIALIZE</span>
-                     </div>
-                     
-                     {/* Animated shine */}
-                     <motion.div 
-                        className="absolute top-0 -left-full w-1/2 h-full bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-[-20deg]"
-                        animate={{ left: ["-100%", "200%"] }}
-                        transition={{ repeat: Infinity, duration: 3, repeatDelay: 1 }}
-                     />
-                 </motion.button>
+                 {/* BUTTON */}
+                 <div className="w-full flex justify-center mb-12 md:mb-0">
+                     <motion.button 
+                        onClick={handleStart} 
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        transition={{ delay: 1.2 }}
+                        className="group relative w-full max-w-[280px] h-16 bg-transparent"
+                     >
+                         {/* High Tech Button Frame */}
+                         <svg className="absolute inset-0 w-full h-full text-slate-800 group-hover:text-cyan-900/40 transition-colors duration-300 drop-shadow-[0_0_15px_rgba(6,182,212,0.2)]" viewBox="0 0 280 64" fill="currentColor">
+                             <path d="M20,0 L260,0 L280,20 L280,44 L260,64 L20,64 L0,44 L0,20 Z" fillOpacity="0.8" />
+                             <path d="M20,2 L260,2 L278,20 L278,44 L260,62 L20,62 L2,44 L2,20 Z" fill="none" stroke="rgba(6,182,212,0.5)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                         </svg>
+
+                         <span className="relative z-10 font-tech font-black text-xl tracking-[0.15em] text-white group-hover:text-cyan-200 transition-colors flex items-center justify-center gap-3">
+                             <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
+                             INITIALIZE
+                             <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
+                         </span>
+                         
+                         {/* Moving Shine */}
+                         <div className="absolute inset-0 overflow-hidden rounded-lg opacity-30 pointer-events-none">
+                            <motion.div 
+                                className="absolute top-0 -left-full w-1/2 h-full bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-20deg]"
+                                animate={{ left: ["-100%", "200%"] }}
+                                transition={{ repeat: Infinity, duration: 3, repeatDelay: 1 }}
+                            />
+                         </div>
+                     </motion.button>
+                 </div>
+
              </div>
-             
-             {/* Footer Status - Positioned at bottom of screen, safe distance */}
+
+             {/* FOOTER STATUS */}
              <motion.div 
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 0.6 }}
+                animate={{ opacity: 0.5 }}
                 transition={{ delay: 1.5 }}
-                className="absolute bottom-4 left-0 right-0 text-center text-[10px] text-cyan-900 font-mono flex gap-4 md:gap-8 justify-center pointer-events-none"
+                className="absolute bottom-6 left-0 right-0 flex justify-center gap-6 text-[9px] font-mono text-cyan-900 pointer-events-none"
              >
                 <span>SYS.VER.3.1.2</span>
-                <span>ONLINE</span>
+                <span className="animate-pulse text-emerald-900">ONLINE</span>
                 <span>SECURE.CONN</span>
              </motion.div>
-             
-             {/* Scanlines */}
-             <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-50 bg-[length:100%_2px,3px_100%] pointer-events-none" />
-             <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/80 z-40" />
+
          </div>
       )}
 

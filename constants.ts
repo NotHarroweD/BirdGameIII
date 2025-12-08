@@ -261,12 +261,12 @@ const UTILITY_BUFF_RANGES = {
 
 // Separate small range for rare chance buffs (Diamonds, Gems)
 const RARE_UTILITY_BUFF_RANGES = {
-    [Rarity.COMMON]: { min: 0.1, max: 0.5 },
-    [Rarity.UNCOMMON]: { min: 0.5, max: 1.0 },
-    [Rarity.RARE]: { min: 1.0, max: 2.0 },
-    [Rarity.EPIC]: { min: 2.0, max: 3.5 },
-    [Rarity.LEGENDARY]: { min: 3.5, max: 5.0 },
-    [Rarity.MYTHIC]: { min: 5.0, max: 10.0 }
+    [Rarity.COMMON]: { min: 0.5, max: 1.5 },
+    [Rarity.UNCOMMON]: { min: 1.5, max: 3.0 },
+    [Rarity.RARE]: { min: 3.0, max: 5.0 },
+    [Rarity.EPIC]: { min: 5.0, max: 8.0 },
+    [Rarity.LEGENDARY]: { min: 8.0, max: 12.0 },
+    [Rarity.MYTHIC]: { min: 12.0, max: 20.0 }
 };
 
 const UTILITY_BUFF_TYPES: UtilityBuffType[] = ['XP_BONUS', 'SCRAP_BONUS', 'HUNT_BONUS', 'FEATHER_BONUS', 'DIAMOND_BATTLE_CHANCE', 'DIAMOND_HUNT_CHANCE', 'GEM_FIND_CHANCE'];
@@ -473,7 +473,7 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
     ],
     huntingConfig: {
       baseRate: 1.1,
-      description: 'Wise hunter. +10% Experience Gain.'
+      description: 'Wise hunter. Gains Passive XP while hunting.'
     }
   },
   {
