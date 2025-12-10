@@ -1,5 +1,5 @@
 
-import { Bird, MoveType, SkillCheckType, PlayerState, Rarity, RarityTier, BirdInstance, BirdTemplate, BirdStatsConfig, Gear, GearType, GearBuff, UtilityBuffType, Gem, StatBonus, StatType } from './types';
+import { Bird, MoveType, SkillCheckType, PlayerState, Rarity, RarityTier, BirdInstance, BirdTemplate, BirdStatsConfig, Gear, GearType, GearBuff, UtilityBuffType, Gem, StatBonus, StatType, ConsumableType } from './types';
 
 export const INITIAL_PLAYER_STATE: PlayerState = {
   feathers: 0,
@@ -13,9 +13,11 @@ export const INITIAL_PLAYER_STATE: PlayerState = {
   inventory: {
     gear: [],
     gems: [],
+    consumables: [],
     potions: 5,
     revives: 1
   },
+  activeBuffs: [],
   upgrades: {
     clickPower: 1,
     passiveIncome: 0,
@@ -98,7 +100,7 @@ export const UPGRADE_DEFINITIONS: UpgradeDefinition[] = [
         name: 'Habitat Expansion',
         description: 'Increases the maximum number of birds you can keep in your roster.',
         baseCost: { feathers: 0, scrap: 0, diamonds: 1 },
-        costMultiplier: 1.5, // 1, 2, 3, 5, 7 diamonds etc approx
+        costMultiplier: 2.5,
         maxLevel: 10,
         effectPerLevel: '+1 Slot'
     }
@@ -167,6 +169,33 @@ export const RARITY_CONFIG: Record<Rarity, RarityTier> = {
   },
 };
 
+export const CONSUMABLE_STATS = {
+    [ConsumableType.HUNTING_SPEED]: {
+        name: "Chrono Feather",
+        description: "Accelerates hunting tick rate.",
+        stats: {
+             [Rarity.COMMON]: { mult: 1.5, duration: 60 },
+             [Rarity.UNCOMMON]: { mult: 2.0, duration: 90 },
+             [Rarity.RARE]: { mult: 2.5, duration: 120 },
+             [Rarity.EPIC]: { mult: 3.5, duration: 180 },
+             [Rarity.LEGENDARY]: { mult: 5.0, duration: 300 },
+             [Rarity.MYTHIC]: { mult: 10.0, duration: 600 },
+        }
+    },
+    [ConsumableType.BATTLE_REWARD]: {
+        name: "Fortune Charm",
+        description: "Increases battle rewards (Feathers & Scrap).",
+        stats: {
+             [Rarity.COMMON]: { mult: 1.2, duration: 3 },
+             [Rarity.UNCOMMON]: { mult: 1.5, duration: 4 },
+             [Rarity.RARE]: { mult: 2.0, duration: 5 },
+             [Rarity.EPIC]: { mult: 2.5, duration: 8 },
+             [Rarity.LEGENDARY]: { mult: 3.5, duration: 12 },
+             [Rarity.MYTHIC]: { mult: 5.0, duration: 20 },
+        }
+    }
+};
+
 export const BUFF_LABELS: Record<string, string> = {
     // Utility (Gems)
     'XP_BONUS': 'XP Gain',
@@ -176,6 +205,7 @@ export const BUFF_LABELS: Record<string, string> = {
     'DIAMOND_BATTLE_CHANCE': 'Diamond (Battle)',
     'DIAMOND_HUNT_CHANCE': 'Diamond (Hunt)',
     'GEM_FIND_CHANCE': 'Gem Find',
+    'ITEM_FIND_CHANCE': 'Item Find',
     // Stats (Gear)
     'HP': 'Health',
     'ATK': 'Attack',
@@ -269,7 +299,7 @@ const RARE_UTILITY_BUFF_RANGES = {
     [Rarity.MYTHIC]: { min: 12.0, max: 20.0 }
 };
 
-const UTILITY_BUFF_TYPES: UtilityBuffType[] = ['XP_BONUS', 'SCRAP_BONUS', 'HUNT_BONUS', 'FEATHER_BONUS', 'DIAMOND_BATTLE_CHANCE', 'DIAMOND_HUNT_CHANCE', 'GEM_FIND_CHANCE'];
+const UTILITY_BUFF_TYPES: UtilityBuffType[] = ['XP_BONUS', 'SCRAP_BONUS', 'HUNT_BONUS', 'FEATHER_BONUS', 'DIAMOND_BATTLE_CHANCE', 'DIAMOND_HUNT_CHANCE', 'GEM_FIND_CHANCE', 'ITEM_FIND_CHANCE'];
 
 // Used for GEMS
 export const generateGemBuffs = (itemRarity: Rarity): GearBuff[] => {
@@ -282,7 +312,7 @@ export const generateGemBuffs = (itemRarity: Rarity): GearBuff[] => {
         
         const statType = UTILITY_BUFF_TYPES[Math.floor(Math.random() * UTILITY_BUFF_TYPES.length)];
         
-        const isRareType = statType === 'DIAMOND_BATTLE_CHANCE' || statType === 'DIAMOND_HUNT_CHANCE' || statType === 'GEM_FIND_CHANCE';
+        const isRareType = statType === 'DIAMOND_BATTLE_CHANCE' || statType === 'DIAMOND_HUNT_CHANCE' || statType === 'GEM_FIND_CHANCE' || statType === 'ITEM_FIND_CHANCE';
         const range = isRareType ? RARE_UTILITY_BUFF_RANGES[buffRarity] : UTILITY_BUFF_RANGES[buffRarity];
         
         const rawValue = range.min + Math.random() * (range.max - range.min);
@@ -424,8 +454,8 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
     id: 'hawk',
     name: 'Hawk',
     species: 'Tactical Class',
-    description: 'Balanced stats with guaranteed hit abilities.',
-    imageUrl: 'https://images.unsplash.com/photo-1611762744276-8e503ae8d29b?q=80&w=800&auto=format&fit=crop',
+    description: 'Cybernetically enhanced with guaranteed hit abilities.',
+    imageUrl: 'https://images.unsplash.com/photo-1610452331575-b62070650942?q=80&w=800&auto=format&fit=crop',
     baseStats: {
       hp: [110, 130],
       energy: [95, 115],
@@ -473,7 +503,7 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
     ],
     huntingConfig: {
       baseRate: 1.1,
-      description: 'Wise hunter. Gains Passive XP while hunting.'
+      description: 'Wise hunter. 25% Chance to gain Passive XP while hunting.'
     }
   },
   {
@@ -496,12 +526,12 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
     moves: [
       { id: 'acid_puke', name: 'Acid Bile', description: 'Corrosive attack.', type: MoveType.ATTACK, power: 25, cost: 15, accuracy: 90, cooldown: 4000, skillCheck: SkillCheckType.MASH },
       { id: 'harden', name: 'Harden', description: 'Toughen skin.', type: MoveType.DEFENSE, power: 0, cost: 15, accuracy: 100, cooldown: 8000 },
-      { id: 'carrion_feast', name: 'Carrion Feast', description: 'Drain life from enemy.', type: MoveType.DRAIN, power: 40, cost: 35, accuracy: 95, cooldown: 10000, skillCheck: SkillCheckType.COMBO },
+      { id: 'carrion_feast', name: 'Carrion Feast', description: 'Drain life from enemy.', type: MoveType.DRAIN, power: 40, cost: 35, accuracy: 95, cooldown: 10000, skillCheck: SkillCheckType.DRAIN_GAME },
       { id: 'bone_drop', name: 'Bone Drop', description: 'Drop from height.', type: MoveType.SPECIAL, power: 60, cost: 45, accuracy: 85, requiresHeight: true, cooldown: 17000 }
     ],
     huntingConfig: {
       baseRate: 0.8,
-      description: 'Rare finds. 1% Chance to find Diamonds.'
+      description: 'Scavenger. 2% Chance to find Items.'
     }
   }
 ];

@@ -1,13 +1,12 @@
-
 import React, { useState } from 'react';
-import { PlayerState, HubTab, HubProps } from '../types';
+import { PlayerState, HubTab, HubProps, ConsumableType, Rarity } from '../types';
 import { Navigation } from './Navigation';
 import { RosterView } from './RosterView';
 import { LabView } from './LabView';
 import { MapView } from './MapView';
 import { InventoryView } from './InventoryView';
 import { UpgradesView } from './UpgradesView';
-import { Database, Activity, Target, Hammer, Gem } from 'lucide-react';
+import { Database, Activity, Target, Hammer, Gem, Clock, Award } from 'lucide-react';
 import { RARITY_CONFIG } from '../constants';
 
 export const Hub: React.FC<HubProps> = ({ 
@@ -29,7 +28,8 @@ export const Hub: React.FC<HubProps> = ({
     onReleaseBird,
     initialTab = HubTab.MAP,
     onSocketGem,
-    onUnsocketGem
+    onUnsocketGem,
+    onUseConsumable
 }) => {
   const [activeTab, setActiveTab] = useState<HubTab>(initialTab);
 
@@ -41,39 +41,67 @@ export const Hub: React.FC<HubProps> = ({
       }
   });
 
+  // Apply active hunt buff to display
+  const huntBuff = playerState.activeBuffs.find(b => b.type === ConsumableType.HUNTING_SPEED);
+  if (huntBuff) {
+      passiveRate *= huntBuff.multiplier;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans">
       
       {/* Top Bar */}
-      <div className="fixed top-0 left-0 right-0 h-16 bg-slate-900/90 backdrop-blur border-b border-slate-800 z-40 flex items-center justify-between px-6 shadow-lg">
-          <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                  <Database className="text-cyan-400" size={18} />
+      <div className="fixed top-0 left-0 right-0 min-h-16 py-2 bg-slate-900/95 backdrop-blur border-b border-slate-800 z-40 flex flex-wrap items-center justify-between px-4 md:px-6 shadow-lg gap-y-2">
+          <div className="flex items-center gap-2 md:gap-4 overflow-x-auto no-scrollbar max-w-[70%] md:max-w-none">
+              <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+                  <Database className="text-cyan-400" size={16} />
                   <div className="flex flex-col">
-                      <span className="font-tech text-xl font-bold leading-none">{Math.floor(playerState.feathers).toLocaleString()}</span>
-                      <span className="text-[9px] text-slate-500 uppercase tracking-wider">Feathers</span>
+                      <span className="font-tech text-base md:text-xl font-bold leading-none">{Math.floor(playerState.feathers).toLocaleString()}</span>
+                      <span className="text-[8px] md:text-[9px] text-slate-500 uppercase tracking-wider">Feathers</span>
                   </div>
               </div>
-              <div className="flex items-center gap-2 border-l border-slate-700 pl-4">
-                  <Hammer className="text-slate-400" size={16} />
+              <div className="flex items-center gap-1.5 md:gap-2 border-l border-slate-700 pl-2 md:pl-4 shrink-0">
+                  <Hammer className="text-slate-400" size={14} />
                   <div className="flex flex-col">
-                      <span className="font-tech text-xl font-bold leading-none text-slate-300">{Math.floor(playerState.scrap).toLocaleString()}</span>
-                      <span className="text-[9px] text-slate-500 uppercase tracking-wider">Scrap</span>
+                      <span className="font-tech text-base md:text-xl font-bold leading-none text-slate-300">{Math.floor(playerState.scrap).toLocaleString()}</span>
+                      <span className="text-[8px] md:text-[9px] text-slate-500 uppercase tracking-wider">Scrap</span>
                   </div>
               </div>
-               <div className="flex items-center gap-2 border-l border-slate-700 pl-4">
-                  <Gem className="text-blue-400" size={16} />
+               <div className="flex items-center gap-1.5 md:gap-2 border-l border-slate-700 pl-2 md:pl-4 shrink-0">
+                  <Gem className="text-blue-400" size={14} />
                   <div className="flex flex-col">
-                      <span className="font-tech text-xl font-bold leading-none text-blue-300">{playerState.diamonds}</span>
-                      <span className="text-[9px] text-slate-500 uppercase tracking-wider">Diamonds</span>
+                      <span className="font-tech text-base md:text-xl font-bold leading-none text-blue-300">{playerState.diamonds}</span>
+                      <span className="text-[8px] md:text-[9px] text-slate-500 uppercase tracking-wider">Gems</span>
                   </div>
               </div>
           </div>
-          <div className="flex items-center gap-3">
+          
+          <div className="flex items-center gap-2 md:gap-3 ml-auto">
               <div className="text-right hidden md:block">
                   <div className="text-xs text-slate-500">GATHERING RATE</div>
                   <div className="font-mono text-emerald-400">+{passiveRate.toFixed(1)}/s</div>
               </div>
+              
+              {/* Buff Indicators */}
+              <div className="flex items-center gap-1">
+                  {playerState.activeBuffs.map((buff, i) => {
+                      const rarityColor = RARITY_CONFIG[buff.rarity].color;
+                      return (
+                          <div key={i} className={`bg-slate-800 p-1.5 rounded border border-slate-700 relative group`}>
+                              {buff.type === ConsumableType.HUNTING_SPEED && <Clock size={14} className={rarityColor} />}
+                              {buff.type === ConsumableType.BATTLE_REWARD && <Award size={14} className={rarityColor} />}
+                              
+                              <div className="absolute top-full right-0 mt-1 bg-slate-900 border border-slate-700 p-2 rounded shadow-xl z-50 hidden group-hover:block whitespace-nowrap">
+                                  <div className={`text-xs font-bold ${rarityColor}`}>{buff.type === ConsumableType.HUNTING_SPEED ? "Speed Boost" : "Reward Bonus"}</div>
+                                  <div className="text-[10px] text-slate-400">
+                                      {buff.type === ConsumableType.HUNTING_SPEED ? `${buff.remaining}s remaining` : `${buff.remaining} battles left`}
+                                  </div>
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
+
               <div className="w-px h-8 bg-slate-800 hidden md:block" />
               <div className="bg-slate-800 px-3 py-1 rounded-full border border-slate-700 flex items-center gap-2">
                   <Activity size={14} className="text-emerald-500" />
@@ -94,6 +122,9 @@ export const Hub: React.FC<HubProps> = ({
                     onAssignHunter={onAssignHunter}
                     onRecallHunter={onRecallHunter}
                     onReleaseBird={onReleaseBird}
+                    onSalvageGear={onSalvageGear}
+                    onSocketGem={onSocketGem}
+                    onUnsocketGem={onUnsocketGem}
                   />
               </div>
           )}
@@ -105,6 +136,7 @@ export const Hub: React.FC<HubProps> = ({
                     onSalvageGear={onSalvageGear}
                     onSocketGem={onSocketGem}
                     onUnsocketGem={onUnsocketGem}
+                    onUseConsumable={onUseConsumable}
                   />
               </div>
           )}

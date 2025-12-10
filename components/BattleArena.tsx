@@ -1,17 +1,18 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { BirdInstance, BattleBird, Move, BattleLog, MoveType, Altitude, Weather, SkillCheckType, BattleResult, Rarity, Gear, StatType, Gem } from '../types';
+import { BirdInstance, BattleBird, Move, BattleLog, MoveType, Altitude, Weather, SkillCheckType, BattleResult, Rarity, Gear, StatType, Gem, ActiveBuff, ConsumableType, Consumable } from '../types';
 import { BIRD_TEMPLATES, RARITY_CONFIG, rollRarity, generateBird, XP_TABLE, BUFF_LABELS, generateGem } from '../constants';
 import { Button } from './Button';
 import { HealthBar } from './HealthBar';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
-import { Activity, ArrowUp, ArrowDown, Cloud, CloudLightning, Wind, Crosshair, Zap, Award, ChevronsUp, ChevronRight, Shield, Heart, RotateCcw, Map, Hammer, Gem as GemIcon, Droplets, Skull, Hexagon } from 'lucide-react';
+import { Activity, ArrowUp, ArrowDown, Cloud, CloudLightning, Wind, Crosshair, Zap, Award, ChevronsUp, ChevronRight, Shield, Heart, RotateCcw, Map, Hammer, Gem as GemIcon, Droplets, Skull, Hexagon, Eye, Moon, Flame, Briefcase } from 'lucide-react';
 import { getAITurn } from '../services/geminiService';
 
 interface BattleArenaProps {
   playerBirdInstance: BirdInstance;
   enemyLevel: number;
   onBattleComplete: (result: BattleResult, playAgain: boolean) => void;
+  activeBuffs?: ActiveBuff[]; // Added prop
 }
 
 // Moved StatusBadge here as it is used
@@ -102,7 +103,7 @@ interface ActiveSkillCheck {
   storedMultiplier?: number; // Result of stage 1
 }
 
-export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, enemyLevel, onBattleComplete }) => {
+export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, enemyLevel, onBattleComplete, activeBuffs = [] }) => {
   // --- Game State ---
   const playerStats = getScaledStats(playerBirdInstance, playerBirdInstance.level);
   const [playerBird, setPlayerBird] = useState<BattleBird>({ 
@@ -144,7 +145,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
   // Result State for Overlay
   const [resultData, setResultData] = useState<{
       winner: 'player' | 'opponent';
-      rewards: { xp: number; feathers: number; scrap: number; diamonds: number; gem?: Gem };
+      rewards: { xp: number; feathers: number; scrap: number; diamonds: number; gem?: Gem; consumable?: Consumable };
   } | null>(null);
   
   // --- Refs for Game Loop ---
@@ -258,13 +259,26 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
     // Speed-based Evasion Logic
     if (move.type === MoveType.ATTACK || move.type === MoveType.SPECIAL || move.type === MoveType.DRAIN) {
         if (defender.speed > attacker.speed) {
-            const speedDelta = defender.speed - attacker.speed;
-            const evasionChance = Math.min(40, speedDelta * 0.5);
-            accuracy -= evasionChance;
+            // HAWK PASSIVE: Keen Eye (Attacks cannot be dodged)
+            if (attacker.id !== 'hawk') {
+                const speedDelta = defender.speed - attacker.speed;
+                const evasionChance = Math.min(40, speedDelta * 0.5);
+                accuracy -= evasionChance;
+            } else {
+                 // queueText("KEEN EYE", isPlayer ? 'player' : 'opponent', "text-amber-400", 0.8, 0, 0);
+            }
         }
     }
 
-    if (weatherRef.current === Weather.STORM) accuracy -= 20;
+    if (weatherRef.current === Weather.STORM) {
+        // OWL PASSIVE: Night Vision (Immune to accuracy penalties)
+        if (attacker.id !== 'owl') {
+            accuracy -= 20;
+        } else {
+            // queueText("NIGHT VISION", isPlayer ? 'player' : 'opponent', "text-purple-400", 0.8, 0, 0);
+        }
+    }
+    
     if (multiplier >= 1.5) accuracy += 20;
 
     const hit = Math.random() * 100 <= accuracy;
@@ -307,6 +321,12 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
                     isCrit = true;
                     damage *= 1.5;
                 }
+            }
+
+            // EAGLE PASSIVE: Apex Predator (Bonus dmg to low HP targets)
+            if (attacker.id === 'eagle' && defender.currentHp < defender.maxHp * 0.5) {
+                damage *= 1.25;
+                queueText("PREDATOR", attackerTarget, "text-rose-500", 1.0, 0, 50);
             }
 
             if (currentAttackerState.altitude > currentDefenderState.altitude) damage *= 1.2;
@@ -394,6 +414,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
           let featherBonus = 0;
           let diamondChanceBonus = 0;
           let gemFindBonus = 0;
+          let itemFindBonus = 0;
 
           // Utility Buffs are now on GEMS in sockets
           const addGemBuffs = (g: Gear | null) => {
@@ -406,6 +427,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
                            if (b.stat === 'FEATHER_BONUS') featherBonus += b.value;
                            if (b.stat === 'DIAMOND_BATTLE_CHANCE') diamondChanceBonus += b.value;
                            if (b.stat === 'GEM_FIND_CHANCE') gemFindBonus += b.value;
+                           if (b.stat === 'ITEM_FIND_CHANCE') itemFindBonus += b.value;
                        });
                    }
                });
@@ -413,13 +435,20 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
           addGemBuffs(playerBirdInstance.gear.beak);
           addGemBuffs(playerBirdInstance.gear.claws);
 
+          // --- APPLY ACTIVE BUFFS ---
+          const rewardBuff = activeBuffs.find(b => b.type === ConsumableType.BATTLE_REWARD);
+          let consumableMult = 1.0;
+          if (rewardBuff) {
+              consumableMult = rewardBuff.multiplier;
+          }
+
           // 1. XP
           const baseXp = 100 * (1 + enemyLevel * 0.5) * rarityMult;
           const xpReward = Math.floor(baseXp * (1 + (xpBonus / 100)));
           
           // 2. Feathers
           const baseFeathers = 50 * (1 + enemyLevel * 0.2) * rarityMult;
-          const featherReward = Math.floor(baseFeathers * (1 + (featherBonus / 100)));
+          const featherReward = Math.floor(baseFeathers * (1 + (featherBonus / 100)) * consumableMult);
           
           // 3. Scrap
           let scrapChance = 0;
@@ -441,12 +470,12 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
           let scrapReward = 0;
           if (Math.random() < scrapChance) {
               const baseScrap = scrapMin + Math.random() * (scrapMax - scrapMin);
-              scrapReward = Math.floor(baseScrap * levelScale * (1 + (scrapBonus / 100)));
+              scrapReward = Math.floor(baseScrap * levelScale * (1 + (scrapBonus / 100)) * consumableMult);
           }
 
-          // 4. Diamonds
+          // 4. Diamonds - Increased starting chance
           let diamondReward = 0;
-          const baseDiamondChance = 1.0; 
+          const baseDiamondChance = 5.0; // Increased from 1.0
           const totalDiamondChance = baseDiamondChance + diamondChanceBonus;
           if (Math.random() * 100 < totalDiamondChance) {
                diamondReward = 1;
@@ -470,9 +499,29 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
               const gem = generateGem(rollRarity(opponentBird.rarity === Rarity.COMMON ? 0 : 2)); 
               gemReward = gem;
           }
+
+          // 6. Consumables
+          let consumableReward: Consumable | undefined;
+          let baseConsumableChance = 5.0; 
+          // Chance increases with opponent rarity
+          switch (opponentBird.rarity) {
+              case Rarity.COMMON: baseConsumableChance = 3.0; break;
+              case Rarity.UNCOMMON: baseConsumableChance = 5.0; break;
+              case Rarity.RARE: baseConsumableChance = 8.0; break;
+              case Rarity.EPIC: baseConsumableChance = 12.0; break;
+              case Rarity.LEGENDARY: baseConsumableChance = 18.0; break;
+              case Rarity.MYTHIC: baseConsumableChance = 25.0; break;
+          }
+          const totalItemChance = baseConsumableChance + itemFindBonus;
+
+          if (Math.random() * 100 < totalItemChance) {
+              const type = Math.random() < 0.5 ? ConsumableType.HUNTING_SPEED : ConsumableType.BATTLE_REWARD;
+              const rarity = rollRarity(-1); 
+              consumableReward = { type, rarity, count: 1 };
+          }
           
           setTimeout(() => {
-              setResultData({ winner: 'player', rewards: { xp: xpReward, feathers: featherReward, scrap: scrapReward, diamonds: diamondReward, gem: gemReward } });
+              setResultData({ winner: 'player', rewards: { xp: xpReward, feathers: featherReward, scrap: scrapReward, diamonds: diamondReward, gem: gemReward, consumable: consumableReward } });
           }, 1500);
       } else {
           setTimeout(() => {
@@ -507,6 +556,12 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
           if (progress >= 45 && progress <= 55) secondaryMultiplier = 1.0; 
           else if (progress >= 30 && progress <= 70) secondaryMultiplier = 0.5; 
           else secondaryMultiplier = 0.1; 
+      } else if (check.type === SkillCheckType.DRAIN_GAME) {
+          multiplier = check.storedMultiplier || 1.0; // Stage 1 result
+          const dist = Math.abs(progress - 50);
+          if (dist < 5) secondaryMultiplier = 1.0; // Perfect Center = 100% Drain
+          else if (dist < 15) secondaryMultiplier = 0.5; // Good = 50%
+          else secondaryMultiplier = 0.1; // Miss = 10%
       }
 
       let text = "GOOD";
@@ -514,7 +569,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
       if (multiplier >= 1.5) { text = "PERFECT!"; color = "text-yellow-400"; }
       else if (multiplier < 0.8) { text = "WEAK"; color = "text-slate-500"; }
       
-      if (check.type === SkillCheckType.COMBO) {
+      if (check.type === SkillCheckType.COMBO || check.type === SkillCheckType.DRAIN_GAME) {
            if (secondaryMultiplier === 1.0) { text = "MAX DRAIN!"; color = "text-purple-400"; }
            else if (secondaryMultiplier === 0.1) { text = "POOR ABSORB"; color = "text-slate-400"; }
       }
@@ -530,9 +585,17 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
       const progress = check.progress;
       let dmgMult = 1.0;
       
-      if (progress >= 45 && progress <= 55) dmgMult = 1.5;
-      else if (progress >= 30 && progress <= 70) dmgMult = 1.2;
-      else dmgMult = 0.8;
+      if (check.type === SkillCheckType.COMBO) {
+          if (progress >= 45 && progress <= 55) dmgMult = 1.5;
+          else if (progress >= 30 && progress <= 70) dmgMult = 1.2;
+          else dmgMult = 0.8;
+      } else if (check.type === SkillCheckType.DRAIN_GAME) {
+          // Power bar logic: Higher is better
+          if (progress >= 90) dmgMult = 1.5;
+          else if (progress >= 60) dmgMult = 1.2;
+          else if (progress >= 30) dmgMult = 1.0;
+          else dmgMult = 0.5;
+      }
       
       const newCheck = {
           ...check,
@@ -593,12 +656,30 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
               } else {
                   setActiveSkillCheck(prev => prev ? ({...prev, progress: Math.max(0, prev.progress - (0.12 * (delta/16)))}) : null);
               }
+          } else if (check.type === SkillCheckType.DRAIN_GAME) {
+              if (check.stage === 1) {
+                  // Stage 1: Power Charge (Fills up then bounces)
+                  const speed = 2.0; 
+                  let p = check.progress + (speed * (delta/16)) * (check.direction || 1);
+                  if (p >= 100 || p <= 0) check.direction = (check.direction || 1) * -1;
+                  check.progress = Math.max(0, Math.min(100, p));
+                  setActiveSkillCheck({...check});
+              } else {
+                  // Stage 2: Siphon Target (Oscillates fast)
+                  const speed = 3.0;
+                  let p = check.progress + (speed * (delta/16)) * (check.direction || 1);
+                  if (p >= 100 || p <= 0) check.direction = (check.direction || 1) * -1;
+                  check.progress = Math.max(0, Math.min(100, p));
+                  setActiveSkillCheck({...check});
+              }
           }
       }
 
-      // 1-Second Tick (Energy, Bleed)
+      // 1-Second Tick (Passive Effects, Bleed)
       if (now - lastBleedTickRef.current > 1000) {
           lastBleedTickRef.current = now;
+          
+          // Bleed Damage
           if (playerBirdRef.current.statusEffects.includes('bleed')) {
               setPlayerBird(prev => ({...prev, currentHp: Math.max(0, prev.currentHp - Math.floor(prev.maxHp * 0.05))}));
               spawnFloatingText("-BLEED", 'player', -30, 0, "text-rose-600");
@@ -607,12 +688,34 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
               setOpponentBird(prev => ({...prev, currentHp: Math.max(0, prev.currentHp - Math.floor(prev.maxHp * 0.05))}));
               spawnFloatingText("-BLEED", 'opponent', 30, 0, "text-rose-600");
           }
+
+          // VULTURE PASSIVE: Rot Eater (Heal every turn)
+          const applyVulturePassive = (bird: BattleBird, setBird: React.Dispatch<React.SetStateAction<BattleBird>>, target: 'player'|'opponent') => {
+              if (bird.id === 'vulture') {
+                  const heal = Math.ceil(bird.maxHp * 0.03); // 3% heal
+                  setBird(prev => ({ ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + heal) }));
+                  // spawnFloatingText(`+${heal}`, target, 0, 0, "text-emerald-500", 0.8);
+              }
+          };
+          applyVulturePassive(playerBirdRef.current, setPlayerBird, 'player');
+          applyVulturePassive(opponentBirdRef.current, setOpponentBird, 'opponent');
       }
 
       if (delta >= 100) {
           const factor = delta/1000;
-          setPlayerBird(prev => ({...prev, currentEnergy: Math.min(prev.maxEnergy, prev.currentEnergy + (5 * factor))}));
-          setOpponentBird(prev => ({...prev, currentEnergy: Math.min(prev.maxEnergy, prev.currentEnergy + (5 * factor))}));
+          
+          // Energy Regen with Passive Check
+          const applyEnergyRegen = (bird: BattleBird, setBird: React.Dispatch<React.SetStateAction<BattleBird>>) => {
+             // HUMMINGBIRD PASSIVE: Hyper Metabolism (+50% Regen)
+             const baseRegen = 5;
+             const effectiveRegen = bird.id === 'hummingbird' ? baseRegen * 1.5 : baseRegen;
+             
+             setBird(prev => ({...prev, currentEnergy: Math.min(prev.maxEnergy, prev.currentEnergy + (effectiveRegen * factor))}));
+          };
+
+          applyEnergyRegen(playerBirdRef.current, setPlayerBird);
+          applyEnergyRegen(opponentBirdRef.current, setOpponentBird);
+          
           processAI(now);
           lastTickRef.current = now;
       }
@@ -653,7 +756,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
           setActiveSkillCheck(prev => prev ? ({...prev, progress: Math.min(100, prev.progress + 8)}) : null);
       } else if (check.type === SkillCheckType.TIMING) {
           resolveMinigame();
-      } else if (check.type === SkillCheckType.COMBO) {
+      } else if (check.type === SkillCheckType.COMBO || check.type === SkillCheckType.DRAIN_GAME) {
           if (check.stage === 1) {
               advanceComboStage();
           } else {
@@ -661,6 +764,50 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
           }
       }
   };
+
+  const PassiveBadge = ({ bird }: { bird: BattleBird }) => {
+      let icon = <Zap size={10} />;
+      let color = "text-slate-400";
+      
+      // Determine passive icon based on ID
+      if (bird.id === 'hummingbird') { icon = <Zap size={10} />; color = "text-yellow-400"; }
+      if (bird.id === 'eagle') { icon = <Flame size={10} />; color = "text-rose-500"; }
+      if (bird.id === 'hawk') { icon = <Eye size={10} />; color = "text-cyan-400"; }
+      if (bird.id === 'owl') { icon = <Moon size={10} />; color = "text-purple-400"; }
+      if (bird.id === 'vulture') { icon = <Skull size={10} />; color = "text-emerald-500"; }
+
+      return (
+          <div className={`flex items-center gap-1 bg-slate-900/50 px-1.5 py-0.5 rounded border border-slate-700/50 ${color} opacity-80`}>
+             {icon} <span className="text-[8px] uppercase font-bold tracking-wider">{bird.passive.name}</span>
+          </div>
+      );
+  }
+
+  // --- Calculate Boosts for Display ---
+  const activeConsumable = activeBuffs.find(b => b.type === ConsumableType.BATTLE_REWARD);
+  let xpBonus = 0;
+  let scrapBonus = 0;
+  let featherBonus = 0;
+  let diamondChanceBonus = 0;
+  let itemFindBonus = 0;
+  
+  // Calculate Gear Boosts
+  const addGemBuffs = (g: Gear | null) => {
+       if (!g || !g.sockets) return;
+       g.sockets.forEach(gem => {
+           if (gem) {
+               gem.buffs.forEach(b => {
+                   if (b.stat === 'XP_BONUS') xpBonus += b.value;
+                   if (b.stat === 'SCRAP_BONUS') scrapBonus += b.value;
+                   if (b.stat === 'FEATHER_BONUS') featherBonus += b.value;
+                   if (b.stat === 'DIAMOND_BATTLE_CHANCE') diamondChanceBonus += b.value;
+                   if (b.stat === 'ITEM_FIND_CHANCE') itemFindBonus += b.value;
+               });
+           }
+       });
+  };
+  addGemBuffs(playerBirdInstance.gear.beak);
+  addGemBuffs(playerBirdInstance.gear.claws);
 
   return (
     <div className="h-[100dvh] w-full bg-slate-950 relative overflow-hidden flex flex-col font-sans">
@@ -680,7 +827,15 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
            <div className="flex items-center gap-2 text-cyan-500">
                <Wind size={14} /> {weather === Weather.CLEAR ? 'CLEAR SKIES' : weather}
            </div>
-           <div className="text-slate-500">ZONE {enemyLevel}</div>
+           <div className="flex items-center gap-3">
+               {activeConsumable && (
+                   <div className="flex items-center gap-1 text-[10px] text-yellow-400">
+                       <Award size={12} />
+                       <span>{activeConsumable.multiplier}x REWARDS ({activeConsumable.remaining})</span>
+                   </div>
+               )}
+               <div className="text-slate-500">ZONE {enemyLevel}</div>
+           </div>
        </div>
 
        {/* --- Battle Stage --- */}
@@ -707,13 +862,13 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
                      </div>
 
                      <div className="w-48">
-                         <div className="flex justify-between text-xs font-bold mb-1">
-                             <span className={RARITY_CONFIG[opponentBird.rarity].color}>{opponentBird.name}</span>
-                             <span className="text-rose-400">{Math.round(opponentBird.currentHp)}</span>
+                         <div className="flex justify-between items-end mb-1">
+                             <span className={`text-xs font-bold ${RARITY_CONFIG[opponentBird.rarity].color}`}>{opponentBird.name}</span>
+                             {/* Passive Badge Removed */}
                          </div>
-                         <HealthBar current={opponentBird.currentHp} max={opponentBird.maxHp} type="health" showValue={false} />
+                         <HealthBar current={opponentBird.currentHp} max={opponentBird.maxHp} type="health" showValue={true} />
                          <div className="h-1" />
-                         <HealthBar current={opponentBird.currentEnergy} max={opponentBird.maxEnergy} type="energy" showValue={false} />
+                         <HealthBar current={opponentBird.currentEnergy} max={opponentBird.maxEnergy} type="energy" showValue={true} />
                      </div>
                 </div>
 
@@ -749,13 +904,13 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
            <motion.div animate={playerAnim} className="flex-1 w-full flex flex-col items-center justify-center relative p-4 bg-gradient-to-t from-slate-900/50 to-transparent">
                 <div className="flex flex-col items-center gap-2">
                      <div className="w-48 mb-2">
-                         <div className="flex justify-between text-xs font-bold mb-1">
-                             <span className={RARITY_CONFIG[playerBird.rarity].color}>{playerBird.name}</span>
-                             <span className="text-emerald-400">{Math.round(playerBird.currentHp)}</span>
+                         <div className="flex justify-between items-end mb-1">
+                             <span className={`text-xs font-bold ${RARITY_CONFIG[playerBird.rarity].color}`}>{playerBird.name}</span>
+                             {/* Passive Badge Removed */}
                          </div>
-                         <HealthBar current={playerBird.currentHp} max={playerBird.maxHp} type="health" showValue={false} />
+                         <HealthBar current={playerBird.currentHp} max={playerBird.maxHp} type="health" showValue={true} />
                          <div className="h-1" />
-                         <HealthBar current={playerBird.currentEnergy} max={playerBird.maxEnergy} type="energy" showValue={false} />
+                         <HealthBar current={playerBird.currentEnergy} max={playerBird.maxEnergy} type="energy" showValue={true} />
                      </div>
 
                      <div className="relative">
@@ -866,6 +1021,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
                     {activeSkillCheck.type === SkillCheckType.TIMING ? "TAP WHEN GREEN!" : 
                      activeSkillCheck.type === SkillCheckType.COMBO 
                        ? (activeSkillCheck.stage === 1 ? "STAGE 1: POWER" : "STAGE 2: ABSORB")
+                       : activeSkillCheck.type === SkillCheckType.DRAIN_GAME
+                       ? (activeSkillCheck.stage === 1 ? "CHARGE POWER!" : "SYNC VITALITY!")
                        : "TAP FAST!"}
                 </div>
 
@@ -878,7 +1035,29 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
                                 style={{left: `${activeSkillCheck.progress}%`}} 
                             />
                         </>
+                    ) : activeSkillCheck.type === SkillCheckType.DRAIN_GAME ? (
+                        activeSkillCheck.stage === 1 ? (
+                            // Stage 1: Power Charge (Blue)
+                            <>
+                                <div className="absolute right-0 top-0 bottom-0 w-[30%] bg-blue-500/20 border-l border-blue-500 flex items-center justify-center">
+                                    <span className="text-[10px] font-bold text-blue-300">MAX</span>
+                                </div>
+                                <div className="h-full bg-gradient-to-r from-blue-900 to-cyan-400 relative z-10 shadow-[0_0_15px_#22d3ee]" style={{width: `${activeSkillCheck.progress}%`}} />
+                            </>
+                        ) : (
+                            // Stage 2: Siphon Sync (Purple)
+                            <>
+                                <div className="absolute left-[45%] right-[45%] top-0 bottom-0 bg-purple-500/40 border-x-2 border-purple-400 z-0 flex items-center justify-center shadow-[0_0_20px_rgba(192,132,252,0.5)]">
+                                    <Heart size={16} className="text-purple-200 fill-purple-200" />
+                                </div>
+                                <motion.div 
+                                    className="absolute w-2 h-full bg-white shadow-[0_0_15px_white] z-20"
+                                    style={{left: `${activeSkillCheck.progress}%`}} 
+                                />
+                            </>
+                        )
                     ) : (
+                        // Mash Game
                         <>
                              <div className="absolute left-[70%] right-[10%] top-0 bottom-0 bg-emerald-500/20 border-x border-emerald-500 z-0 flex items-center justify-center">
                                  <div className="text-[9px] font-bold text-emerald-400 -rotate-90">BONUS</div>
@@ -916,7 +1095,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ playerBirdInstance, en
 // Internal Sub-Component for Results
 const BattleResultOverlay: React.FC<{
     winner: 'player' | 'opponent';
-    rewards: { xp: number; feathers: number; scrap: number; diamonds: number; gem?: Gem };
+    rewards: { xp: number; feathers: number; scrap: number; diamonds: number; gem?: Gem; consumable?: Consumable };
     initialBird: BirdInstance;
     onContinue: (playAgain: boolean) => void;
 }> = ({ winner, rewards, initialBird, onContinue }) => {
@@ -1037,6 +1216,20 @@ const BattleResultOverlay: React.FC<{
                                  <div className={`text-[9px] uppercase font-bold mb-1 ${RARITY_CONFIG[rewards.gem.rarity].color}`}>Gem Found!</div>
                                  <div className={`flex items-center gap-1 text-lg font-tech font-bold ${RARITY_CONFIG[rewards.gem.rarity].color}`}>
                                      <Hexagon size={18} /> {rewards.gem.name}
+                                 </div>
+                             </motion.div>
+                        )}
+
+                        {rewards.consumable && (
+                             <motion.div 
+                               initial={{ x: 0, opacity: 0, scale: 0.8 }}
+                               animate={{ x: 0, opacity: 1, scale: 1 }}
+                               transition={{ delay: 0.4 }}
+                               className={`bg-slate-900 border p-2 rounded flex flex-col items-center min-w-[80px] ${RARITY_CONFIG[rewards.consumable.rarity].borderColor}`}
+                             >
+                                 <div className={`text-[9px] uppercase font-bold mb-1 ${RARITY_CONFIG[rewards.consumable.rarity].color}`}>Item Found!</div>
+                                 <div className={`flex items-center gap-1 text-lg font-tech font-bold ${RARITY_CONFIG[rewards.consumable.rarity].color}`}>
+                                     <Briefcase size={18} /> {rewards.consumable.type === ConsumableType.HUNTING_SPEED ? "Feather" : "Charm"}
                                  </div>
                              </motion.div>
                         )}

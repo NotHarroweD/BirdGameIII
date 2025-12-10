@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { BirdInstance } from '../types';
 import { BIRD_TEMPLATES, generateBird, rollRarity, RARITY_CONFIG, UPGRADE_COSTS } from '../constants';
 import { Button } from './Button';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
-import { Wifi, AlertTriangle, RefreshCw, Database, Crosshair, Trash2, Target, RotateCcw } from 'lucide-react';
+import { Wifi, AlertTriangle, RefreshCw, Database, Crosshair, Trash2, Target, RotateCcw, Zap } from 'lucide-react';
 
 interface CatchScreenProps {
   dropRateMultiplier: number;
@@ -14,6 +13,32 @@ interface CatchScreenProps {
   isFirstCatch?: boolean;
 }
 
+interface VisualPopup {
+  id: string;
+  text: string;
+  subText?: string;
+  color: string;
+  scale: number;
+  rotation: number;
+}
+
+interface VisualParticle {
+  id: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  color: string;
+}
+
+// Geometric Constants for SVG to prevent clipping
+const VIEWBOX_SIZE = 200;
+const CENTER_COORD = 100;
+const STROKE_WIDTH = 24;
+// Radius must be <= 100 - (24/2) = 88 to fit. Using 86 for safety margin.
+const MAIN_RADIUS = 86; 
+
 export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, catchRarityLevel, onKeepBird, onReleaseBird, isFirstCatch = false }) => {
   const [phase, setPhase] = useState<'scanning' | 'detected' | 'catching' | 'revealed' | 'escaped'>('scanning');
   const [caughtBird, setCaughtBird] = useState<BirdInstance | null>(null);
@@ -22,6 +47,13 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
   const LAYERS_TOTAL = 4;
   const [currentLayer, setCurrentLayer] = useState(0);
   const [battery, setBattery] = useState(3);
+  const [catchMultiplier, setCatchMultiplier] = useState(1); // Starts at x1
+  const [streak, setStreak] = useState(0);
+  const [bonusAvailable, setBonusAvailable] = useState(true); // Tracks if current layer can still yield multiplier
+  
+  // Visual Effects State
+  const [visualPopups, setVisualPopups] = useState<VisualPopup[]>([]);
+  const [visualParticles, setVisualParticles] = useState<VisualParticle[]>([]);
   
   const requestRef = useRef<number>();
   const gameState = useRef({
@@ -33,11 +65,34 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
     isRunning: false
   });
   
+  const wasInZoneRef = useRef(false);
+  const bonusAvailableRef = useRef(true); // Ref mirror for loop access
+
   const [cursorAngle, setCursorAngle] = useState(0);
   const [targetZone, setTargetZone] = useState({ angle: 0, width: 60 });
   const [flash, setFlash] = useState<'hit' | 'miss' | null>(null);
   
   const shakeControls = useAnimation();
+
+  // Particle Animation Loop
+  useEffect(() => {
+    let frameId: number;
+    const updateParticles = () => {
+        setVisualParticles(prev => {
+            if (prev.length === 0) return prev;
+            return prev.map(p => ({
+                ...p,
+                x: p.x + p.vx,
+                y: p.y + p.vy,
+                vy: p.vy + 0.3, // Gravity
+                life: p.life - 0.02
+            })).filter(p => p.life > 0);
+        });
+        frameId = requestAnimationFrame(updateParticles);
+    };
+    frameId = requestAnimationFrame(updateParticles);
+    return () => cancelAnimationFrame(frameId);
+  }, []);
 
   useEffect(() => {
     return () => stopLoop();
@@ -55,6 +110,8 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
       setPhase('catching');
       setBattery(3);
       setCurrentLayer(0);
+      setCatchMultiplier(1);
+      setStreak(0);
       setupLayer(0);
   };
 
@@ -76,16 +133,88 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
       };
 
       setTargetZone({ angle: randomAngle, width: baseWidth });
+      setBonusAvailable(true);
+      bonusAvailableRef.current = true;
+      wasInZoneRef.current = false;
       
       const loop = () => {
           if (!gameState.current.isRunning) return;
+          
+          // Update Angle
           gameState.current.angle = (gameState.current.angle + (gameState.current.speed * gameState.current.direction)) % 360;
           if (gameState.current.angle < 0) gameState.current.angle += 360;
 
-          setCursorAngle(gameState.current.angle);
+          const currentAngle = gameState.current.angle;
+          setCursorAngle(currentAngle);
+
+          // Check Zone for "Pass By" Logic
+          const dist = Math.abs(currentAngle - gameState.current.targetAngle);
+          const normalizedDist = dist > 180 ? 360 - dist : dist;
+          const inZone = normalizedDist <= (gameState.current.targetWidth / 2) + 5; // +5 tolerance for detection logic
+
+          // If we were in the zone, and now we are NOT in the zone, we missed the window.
+          if (wasInZoneRef.current && !inZone && bonusAvailableRef.current) {
+               // Missed the cycle
+               setBonusAvailable(false);
+               bonusAvailableRef.current = false;
+          }
+          wasInZoneRef.current = inZone;
+
           requestRef.current = requestAnimationFrame(loop);
       };
       requestRef.current = requestAnimationFrame(loop);
+  };
+
+  const spawnPopup = (text: string, type: 'good' | 'bad' | 'bonus' | 'neutral', subText?: string) => {
+    const id = Math.random().toString();
+    
+    let color = 'text-white';
+    let scale = 1.0;
+
+    if (type === 'good') {
+        color = 'text-emerald-400';
+        scale = 1.5;
+    } else if (type === 'bonus') {
+        color = 'text-yellow-400';
+        scale = 2.0;
+    } else if (type === 'bad') {
+        color = 'text-rose-500';
+        scale = 1.2;
+    } else if (type === 'neutral') {
+        color = 'text-slate-400';
+        scale = 1.0;
+    }
+    
+    setVisualPopups(prev => [...prev, { id, text, subText, color, scale, rotation: (Math.random() - 0.5) * 20 }]);
+    setTimeout(() => setVisualPopups(prev => prev.filter(p => p.id !== id)), 1200);
+  };
+
+  const spawnMultiplierPopup = (mult: number) => {
+      let color = 'text-emerald-400'; // x1
+      if (mult === 2) color = 'text-blue-400'; // x2
+      if (mult === 3) color = 'text-purple-400'; // x3
+      if (mult === 4) color = 'text-rose-500'; // x4
+      if (mult >= 5) color = 'text-yellow-400'; // x5
+
+      spawnPopup(`x${mult}`, 'good', color === 'text-yellow-400' ? 'MAX POWER!' : undefined);
+  };
+
+  const spawnExplosion = () => {
+     const count = 60;
+     const newParticles: VisualParticle[] = [];
+     for(let i=0; i<count; i++) {
+         const angle = Math.random() * Math.PI * 2;
+         const speed = Math.random() * 12 + 5;
+         newParticles.push({
+             id: Math.random().toString(),
+             x: 0, y: 0, 
+             vx: Math.cos(angle) * speed,
+             vy: Math.sin(angle) * speed,
+             life: 1.0,
+             color: i % 2 === 0 ? '#facc15' : '#fbbf24' // Gold variations
+         });
+     }
+     setVisualParticles(prev => [...prev, ...newParticles]);
   };
 
   const handleTap = (e: React.PointerEvent) => {
@@ -97,25 +226,59 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
       let diff = Math.abs(angle - targetAngle);
       if (diff > 180) diff = 360 - diff;
 
-      const hit = diff <= (targetWidth / 2) + 2;
+      const hit = diff <= (targetWidth / 2) + 4; // Slight hit tolerance
 
       if (hit) {
           setFlash('hit');
-          setTimeout(() => setFlash(null), 200);
+          setTimeout(() => setFlash(null), 150);
+          
           const nextLayer = currentLayer + 1;
+          
+          if (bonusAvailableRef.current) {
+              const newStreak = streak + 1;
+              const newMult = catchMultiplier + 1;
+              
+              setStreak(newStreak);
+              setCatchMultiplier(newMult);
+              
+              // Perfect Streak Check (All 4 stages hit with bonus)
+              if (nextLayer >= LAYERS_TOTAL && newStreak === LAYERS_TOTAL) {
+                  // Clear previous popups to prevent overlap with the big finish
+                  setVisualPopups([]);
+                  
+                  setTimeout(() => {
+                      spawnPopup("PERFECT!", 'bonus', "x5 BONUS!");
+                      spawnExplosion();
+                      setCatchMultiplier(5); // Max out
+                  }, 50);
+              } else {
+                  spawnMultiplierPopup(newMult);
+              }
+
+          } else {
+              // Hit but missed rotation bonus
+              setStreak(0); // Reset streak
+              spawnPopup("HIT", 'neutral', "Too Slow");
+          }
 
           if (nextLayer >= LAYERS_TOTAL) {
+              setCurrentLayer(nextLayer);
               gameState.current.isRunning = false;
               stopLoop();
-              revealBird();
+              setTimeout(() => revealBird(bonusAvailableRef.current && streak === 3 ? 5 : catchMultiplier), 1000);
           } else {
               setCurrentLayer(nextLayer);
               setupLayer(nextLayer);
           }
       } else {
           setFlash('miss');
+          setStreak(0);
+          setBonusAvailable(false); // Lose bonus for this layer if we miss tap
+          bonusAvailableRef.current = false;
+          
           shakeScreen();
-          setTimeout(() => setFlash(null), 200);
+          setTimeout(() => setFlash(null), 150);
+          spawnPopup("MISS", 'bad');
 
           const newBattery = battery - 1;
           setBattery(newBattery);
@@ -129,15 +292,15 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
   };
 
   const shakeScreen = async () => {
-      await shakeControls.start({ x: [-10, 10, -10, 10, 0], transition: { duration: 0.2 } });
+      await shakeControls.start({ x: [-8, 8, -8, 8, 0], transition: { duration: 0.3 } });
   };
 
-  const revealBird = () => {
+  const revealBird = (finalMult: number) => {
         const template = BIRD_TEMPLATES[Math.floor(Math.random() * BIRD_TEMPLATES.length)];
-        const rarity = rollRarity(catchRarityLevel);
+        const rarity = rollRarity(catchRarityLevel + (catchMultiplier >= 5 ? 5 : catchMultiplier));
         const newBird = generateBird(template, rarity);
         setCaughtBird(newBird);
-        setTimeout(() => setPhase('revealed'), 500);
+        setPhase('revealed');
   };
 
   const resetEncounter = () => {
@@ -146,8 +309,8 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
   };
 
   const getSegmentPath = (startAngle: number, endAngle: number, radius: number) => {
-    const start = polarToCartesian(100, 100, radius, endAngle);
-    const end = polarToCartesian(100, 100, radius, startAngle);
+    const start = polarToCartesian(CENTER_COORD, CENTER_COORD, radius, endAngle);
+    const end = polarToCartesian(CENTER_COORD, CENTER_COORD, radius, startAngle);
     const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
     return [
         "M", start.x, start.y, 
@@ -167,6 +330,15 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
      const config = RARITY_CONFIG[bird.rarity];
      return Math.floor(UPGRADE_COSTS.RECRUIT * (0.2 + (config.minMult * 0.1)));
   };
+  
+  const getMultColor = (m: number) => {
+    if (m >= 5) return 'text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.8)]';
+    if (m === 4) return 'text-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.8)]';
+    if (m === 3) return 'text-purple-400 drop-shadow-[0_0_8px_rgba(192,132,252,0.8)]';
+    if (m === 2) return 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)]';
+    if (m === 1) return 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]';
+    return 'text-slate-600';
+  }
 
   const StatBlock = ({ label, value, color }: { label: string, value: number, color: string }) => (
     <div className="bg-slate-950 p-2 rounded border border-slate-800">
@@ -175,7 +347,6 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
     </div>
   );
 
-  // Dynamic scrolling behavior: Only allow scroll when in 'revealed' phase to reach buttons on small screens
   const isScrollable = phase === 'revealed';
 
   return (
@@ -196,7 +367,6 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
             className="flex flex-col items-center"
           >
              <div className="relative mb-8 group">
-                {/* Radar Sweep Effect */}
                 <div className="absolute inset-0 rounded-full overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-cyan-500/10 to-transparent animate-spin duration-[3s]" />
                 </div>
@@ -240,7 +410,7 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
             <motion.div
                 key="catching"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center z-20 cursor-pointer"
+                className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center z-20 cursor-pointer overflow-hidden"
                 onPointerDown={handleTap}
             >
                 <motion.div animate={shakeControls} className="relative w-full h-full flex flex-col items-center justify-center pointer-events-none">
@@ -248,75 +418,154 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
                     {flash === 'hit' && <div className="absolute inset-0 bg-emerald-500/10 pointer-events-none z-50 border-[20px] border-emerald-500/50" />}
                     {flash === 'miss' && <div className="absolute inset-0 bg-rose-500/10 pointer-events-none z-50 border-[20px] border-rose-500/50" />}
 
-                    {/* HUD Header */}
-                    <div className="absolute top-12 left-6 right-6 flex justify-between items-start pointer-events-none">
-                        <div>
-                            <div className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mb-1">Signal Integrity</div>
-                            <div className="flex gap-1">
+                    {/* HUD Header - Consolidated Top Bar */}
+                    <div className="absolute top-6 left-6 right-6 flex justify-between items-start pointer-events-none z-30">
+                        {/* Battery Left */}
+                        <div className="bg-slate-900/80 p-2.5 rounded border border-slate-700 backdrop-blur-sm shadow-lg">
+                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5">Signal Integrity</div>
+                            <div className="flex gap-1.5">
                                 {[...Array(3)].map((_, i) => (
-                                    <div key={i} className={`w-8 h-3 skew-x-[-12deg] border border-emerald-900 ${i < battery ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-slate-900/50'}`} />
+                                    <div key={i} className={`w-8 h-3 skew-x-[-12deg] border border-emerald-900/50 transition-colors duration-300 ${i < battery ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-slate-800/50'}`} />
                                 ))}
                             </div>
                         </div>
-                        <div className="text-right">
-                             <div className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest mb-1">Lock Progress</div>
-                             <div className="flex gap-1 justify-end">
-                                {[...Array(LAYERS_TOTAL)].map((_, i) => (
-                                    <div key={i} className={`w-2 h-2 rounded-full ${i < currentLayer ? 'bg-cyan-400 shadow-[0_0_5px_cyan]' : 'bg-slate-800'}`} />
-                                ))}
-                            </div>
+
+                        {/* Multiplier Right */}
+                        <div className="flex flex-col items-end gap-1">
+                             <div className="flex gap-1 mb-1 bg-slate-900/60 p-1 rounded-full border border-slate-800/50">
+                                 {[1,2,3,4,5].map(lvl => (
+                                     <div key={lvl} className={`w-2 h-2 rounded-full border border-slate-700 transition-all ${
+                                         lvl <= catchMultiplier 
+                                            ? lvl === 1 ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' 
+                                            : lvl === 2 ? 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]'
+                                            : lvl === 3 ? 'bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.8)]'
+                                            : lvl === 4 ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
+                                            : 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.8)]'
+                                            : 'bg-slate-900'
+                                     }`} />
+                                 ))}
+                             </div>
+                             
+                             <motion.div 
+                                className="bg-slate-900/90 border-2 border-slate-700 px-3 py-1.5 rounded-lg shadow-xl backdrop-blur-md min-w-[70px]"
+                                key={catchMultiplier}
+                                animate={{ scale: [1, 1.1, 1] }}
+                                transition={{ type: "spring", stiffness: 300, damping: 15 }}
+                             >
+                                <div className="text-[8px] text-slate-500 font-black uppercase tracking-widest text-center mb-0.5">MULTIPLIER</div>
+                                <div className={`text-3xl font-tech font-black leading-none text-center ${getMultColor(catchMultiplier)}`} style={{ WebkitTextStroke: '1px rgba(0,0,0,0.5)' }}>
+                                    x{Math.max(0, catchMultiplier)}
+                                </div>
+                            </motion.div>
                         </div>
                     </div>
 
-                    {/* Main Minigame */}
-                    <div className="relative w-[340px] h-[340px]">
-                        {/* Outer Glow */}
-                        <div className="absolute inset-0 rounded-full border border-slate-800 shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-slate-900/50" />
+                    {/* Main Minigame Scaled Container */}
+                    {/* Using min(vw, vh) ensures it stays fully on screen and doesn't get cut off vertically on landscape or horizontally on mobile */}
+                    <div 
+                        className="relative flex items-center justify-center p-4 aspect-square shrink-0"
+                        style={{ 
+                            width: 'min(90vw, 55vh)', 
+                            maxWidth: '380px' 
+                        }}
+                    >
                         
-                        <svg viewBox="0 0 200 200" className="w-full h-full relative z-10">
+                        {/* Particles Layer */}
+                        {visualParticles.map(p => (
+                            <div 
+                                key={p.id}
+                                className="absolute rounded-full pointer-events-none z-40"
+                                style={{
+                                    width: '8px', height: '8px',
+                                    backgroundColor: p.color,
+                                    left: `calc(50% + ${p.x}px)`,
+                                    top: `calc(50% + ${p.y}px)`,
+                                    opacity: p.life,
+                                    transform: 'translate(-50%, -50%)',
+                                    boxShadow: `0 0 15px ${p.color}`
+                                }}
+                            />
+                        ))}
+
+                        {/* Arcade Popups Layer */}
+                        <AnimatePresence>
+                            {visualPopups.map(p => (
+                                <motion.div
+                                    key={p.id}
+                                    initial={{ scale: 0, opacity: 0, y: 0, rotate: p.rotation }}
+                                    animate={{ scale: p.scale, opacity: 1, y: -80 }}
+                                    exit={{ scale: p.scale * 1.2, opacity: 0, y: -120 }}
+                                    transition={{ duration: 0.5, type: 'spring', stiffness: 200 }}
+                                    className={`absolute pointer-events-none flex flex-col items-center z-50 whitespace-nowrap`}
+                                    style={{ transform: 'translate(-50%, -50%)' }}
+                                >
+                                    <span 
+                                        className={`font-black text-6xl ${p.color} drop-shadow-[0_4px_0_rgba(0,0,0,1)]`}
+                                        style={{ 
+                                            WebkitTextStroke: '2px black',
+                                            textShadow: '0 0 20px rgba(0,0,0,0.5)'
+                                        }}
+                                    >
+                                        {p.text}
+                                    </span>
+                                    {p.subText && (
+                                        <span className="text-white font-bold text-sm bg-black/50 px-2 py-0.5 rounded border border-white/20 mt-1 uppercase tracking-widest">
+                                            {p.subText}
+                                        </span>
+                                    )}
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
+
+                        {/* Outer Ring */}
+                        <div className="absolute inset-2 rounded-full border-2 border-slate-800 shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-slate-900/50 backdrop-blur-sm" />
+                        
+                        <svg viewBox={`0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`} className="w-full h-full relative z-10 overflow-visible">
                             {/* Track */}
-                            <circle cx="100" cy="100" r="90" fill="none" stroke="#0f172a" strokeWidth="20" />
-                            <circle cx="100" cy="100" r="90" fill="none" stroke="#1e293b" strokeWidth="2" strokeDasharray="4 4" />
+                            <circle cx={CENTER_COORD} cy={CENTER_COORD} r={MAIN_RADIUS} fill="none" stroke="#0f172a" strokeWidth={STROKE_WIDTH} />
+                            <circle cx={CENTER_COORD} cy={CENTER_COORD} r={MAIN_RADIUS} fill="none" stroke="#334155" strokeWidth="1" strokeDasharray="2 4" opacity="0.5" />
                             
                             {/* Target Zone */}
                             <path 
-                                d={getSegmentPath(targetZone.angle - (targetZone.width/2), targetZone.angle + (targetZone.width/2), 90)}
+                                d={getSegmentPath(targetZone.angle - (targetZone.width/2), targetZone.angle + (targetZone.width/2), MAIN_RADIUS)}
                                 fill="none"
-                                stroke="#10b981"
-                                strokeWidth="20"
+                                stroke={bonusAvailable ? "#10b981" : "#64748b"} 
+                                strokeWidth={STROKE_WIDTH}
                                 strokeLinecap="butt"
-                                className="drop-shadow-[0_0_15px_rgba(16,185,129,0.6)]"
+                                className={`transition-colors duration-300 ${bonusAvailable ? "drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]" : ""}`}
                             />
                             
                             {/* Cursor */}
-                            <g style={{ transform: `rotate(${cursorAngle}deg)`, transformOrigin: '100px 100px' }}>
-                                {/* Beam */}
-                                <line x1="100" y1="100" x2="190" y2="100" stroke="url(#cursorGrad)" strokeWidth="2" />
+                            <g style={{ transform: `rotate(${cursorAngle}deg)`, transformOrigin: `${CENTER_COORD}px ${CENTER_COORD}px` }}>
+                                <line x1={CENTER_COORD} y1={CENTER_COORD} x2={CENTER_COORD + MAIN_RADIUS} y2={CENTER_COORD} stroke="url(#cursorGrad)" strokeWidth="4" strokeLinecap="round" />
                                 <defs>
                                     <linearGradient id="cursorGrad" x1="0" y1="0" x2="1" y2="0">
                                         <stop offset="0%" stopColor="transparent"/>
+                                        <stop offset="50%" stopColor="#fff"/>
                                         <stop offset="100%" stopColor="#fff"/>
                                     </linearGradient>
                                 </defs>
-                                {/* Head */}
-                                <circle cx="190" cy="100" r="6" fill="#fff" className="drop-shadow-[0_0_15px_white]" />
-                                <circle cx="190" cy="100" r="12" fill="none" stroke="white" strokeWidth="1" opacity="0.5" />
+                                <circle cx={CENTER_COORD + MAIN_RADIUS} cy={CENTER_COORD} r="8" fill="#fff" className="drop-shadow-[0_0_15px_white]" />
+                                <circle cx={CENTER_COORD + MAIN_RADIUS} cy={CENTER_COORD} r="14" fill="none" stroke="white" strokeWidth="2" opacity="0.6" />
                             </g>
                         </svg>
 
-                        {/* Center Info */}
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="w-32 h-32 rounded-full bg-slate-950 border border-slate-700 flex flex-col items-center justify-center shadow-inner">
-                                <div className="text-[9px] text-cyan-500/70 font-bold uppercase mb-1 tracking-widest">Encryption</div>
-                                <div className="text-5xl font-tech font-bold text-white leading-none mb-1">
-                                    {Math.min(currentLayer + 1, LAYERS_TOTAL)}<span className="text-lg text-slate-600">/{LAYERS_TOTAL}</span>
+                        {/* Center Info - Sequence Progress */}
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                            <div className="w-[32%] h-[32%] rounded-full bg-slate-950 border-4 border-slate-800 flex flex-col items-center justify-center shadow-[inset_0_0_20px_black]">
+                                <div className="text-[7px] md:text-[9px] text-slate-500 font-bold uppercase mb-0.5 tracking-widest">SEQUENCE</div>
+                                <div className="text-3xl md:text-5xl font-tech font-black leading-none text-white mb-0.5">
+                                    {currentLayer}
+                                </div>
+                                <div className="text-[8px] md:text-[10px] text-slate-600 font-bold uppercase tracking-widest">
+                                    OF {LAYERS_TOTAL}
                                 </div>
                             </div>
                         </div>
                     </div>
                     
-                    <div className="absolute bottom-12 text-slate-500 text-xs font-mono animate-pulse">
-                        TAP TO LOCK
+                    <div className="absolute bottom-10 text-slate-500 text-xs font-mono animate-pulse tracking-widest bg-black/60 px-6 py-2 rounded-full border border-slate-800 pointer-events-none backdrop-blur-md">
+                        TAP GREEN ZONE
                     </div>
 
                 </motion.div>
@@ -377,7 +626,6 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
                          <StatBlock label="NRG" value={caughtBird.baseEnergy} color="text-yellow-400" />
                      </div>
                      
-                     {/* Hunting Rate Display */}
                      <div className="border-t border-slate-800 pt-4 flex items-center justify-between">
                          <div className="flex items-center gap-2">
                             <Target size={16} className="text-amber-500" />

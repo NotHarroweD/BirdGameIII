@@ -3,8 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Hub } from './components/Hub';
 import { BattleArena } from './components/BattleArena';
 import { CatchScreen } from './components/CatchScreen';
-import { PlayerState, GameScreen, BirdInstance, BattleResult, GearType, HubTab, Gear, Rarity, UpgradeState, GearBuff, Gem } from './types';
-import { INITIAL_PLAYER_STATE, XP_TABLE, UPGRADE_COSTS, generateCraftedGear, RARITY_CONFIG, UPGRADE_DEFINITIONS, generateCraftedGem } from './constants';
+import { PlayerState, GameScreen, BirdInstance, BattleResult, GearType, HubTab, Gear, Rarity, UpgradeState, GearBuff, Gem, ConsumableType, Consumable } from './types';
+import { INITIAL_PLAYER_STATE, XP_TABLE, UPGRADE_COSTS, generateCraftedGear, RARITY_CONFIG, UPGRADE_DEFINITIONS, generateCraftedGem, CONSUMABLE_STATS, rollRarity } from './constants';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function App() {
@@ -14,7 +14,7 @@ export default function App() {
 
   // Persistence
   const [playerState, setPlayerState] = useState<PlayerState>(() => {
-    const saved = localStorage.getItem('bird_game_save_v6'); 
+    const saved = localStorage.getItem('bird_game_save_v7'); 
     if (saved) {
         try {
             const parsed = JSON.parse(saved);
@@ -31,18 +31,27 @@ export default function App() {
                 return g;
             };
 
-            if (parsed.inventory && parsed.inventory.gear) {
-                parsed.inventory.gear = parsed.inventory.gear.map(migrateGear).filter(Boolean);
+            if (parsed.inventory) {
+                if (parsed.inventory.gear) {
+                    parsed.inventory.gear = parsed.inventory.gear.map(migrateGear).filter(Boolean);
+                }
+                if (!parsed.inventory.consumables) {
+                    parsed.inventory.consumables = [];
+                }
             }
+
             if (parsed.birds) {
                 parsed.birds.forEach((b: any) => {
                     if (b.gear.beak) b.gear.beak = migrateGear(b.gear.beak);
                     if (b.gear.claws) b.gear.claws = migrateGear(b.gear.claws);
                 });
             }
-            // Ensure new upgrades exist
+            // Ensure new fields exist
             if (!parsed.upgrades.gemRarityLevel) {
                 parsed.upgrades.gemRarityLevel = 0;
+            }
+            if (!parsed.activeBuffs) {
+                parsed.activeBuffs = [];
             }
             
             return parsed;
@@ -58,8 +67,24 @@ export default function App() {
   useEffect(() => {
     const interval = setInterval(() => {
        setPlayerState(prev => {
+           // Handle Hunting Buffs
+           const huntBuffIndex = prev.activeBuffs.findIndex(b => b.type === ConsumableType.HUNTING_SPEED);
+           let multiplier = 1.0;
+           let newActiveBuffs = [...prev.activeBuffs];
+
+           if (huntBuffIndex !== -1) {
+               multiplier = newActiveBuffs[huntBuffIndex].multiplier;
+               newActiveBuffs[huntBuffIndex].remaining -= 1; // Decrease by 1 second
+               if (newActiveBuffs[huntBuffIndex].remaining <= 0) {
+                   newActiveBuffs.splice(huntBuffIndex, 1);
+               }
+           }
+
+           // --- Resource Calculation ---
            let totalIncome = 0;
            let totalDiamondChance = 0;
+           let totalItemChance = 0;
+           let totalGemChance = 0;
            let extraScrap = 0;
            
            let birdsUpdated = false;
@@ -70,6 +95,9 @@ export default function App() {
                    const rarityMult = RARITY_CONFIG[bird.rarity].minMult;
                    let baseIncome = (bird.huntingConfig.baseRate * rarityMult) * (1 + (bird.level * 0.1));
                    
+                   // Apply Hunting Speed Buff Multiplier directly to yield
+                   baseIncome *= multiplier;
+
                    // Species-Specific Bonuses
                    if (bird.id === 'hummingbird') {
                         if (Math.random() < 0.10) baseIncome *= 2;
@@ -78,28 +106,29 @@ export default function App() {
                    } else if (bird.id === 'owl') {
                         baseIncome *= 1.1;
                         
-                        // Passive XP for Owls
-                        const xpGain = Math.max(1, Math.floor(bird.level * 0.5));
-                        let newXp = bird.xp + xpGain;
-                        let newLevel = bird.level;
-                        let newXpToNext = bird.xpToNextLevel;
+                        // Passive XP for Owls - 25% chance
+                        if (Math.random() < 0.25) {
+                            const xpGain = Math.max(1, Math.floor(bird.level * 0.5));
+                            let newXp = bird.xp + xpGain;
+                            let newLevel = bird.level;
+                            let newXpToNext = bird.xpToNextLevel;
 
-                        while (newXp >= newXpToNext) {
-                            newXp -= newXpToNext;
-                            newLevel++;
-                            newXpToNext = Math.floor(XP_TABLE.BASE * Math.pow(newLevel, XP_TABLE.GROWTH_FACTOR));
-                        }
-                        
-                        if (newXp !== bird.xp || newLevel !== bird.level) {
-                            birdsUpdated = true;
-                            // Only update bird stats if we leveled up, otherwise just XP
-                            return { ...bird, xp: newXp, level: newLevel, xpToNextLevel: newXpToNext };
+                            while (newXp >= newXpToNext) {
+                                newXp -= newXpToNext;
+                                newLevel++;
+                                newXpToNext = Math.floor(XP_TABLE.BASE * Math.pow(newLevel, XP_TABLE.GROWTH_FACTOR));
+                            }
+                            
+                            if (newXp !== bird.xp || newLevel !== bird.level) {
+                                birdsUpdated = true;
+                                // Only update bird stats if we leveled up, otherwise just XP
+                                return { ...bird, xp: newXp, level: newLevel, xpToNextLevel: newXpToNext };
+                            }
                         }
                    }
                    
-                   let diamondChance = 0;
                    if (bird.id === 'vulture') {
-                       diamondChance += 0.005; 
+                       totalItemChance += 0.02; // 2% chance per tick for items
                    }
 
                    let bonusPct = 0;
@@ -109,7 +138,9 @@ export default function App() {
                            if (socket) {
                                socket.buffs.forEach(b => {
                                    if (b.stat === 'HUNT_BONUS') bonusPct += b.value;
-                                   if (b.stat === 'DIAMOND_HUNT_CHANCE') diamondChance += (b.value / 100);
+                                   if (b.stat === 'DIAMOND_HUNT_CHANCE') totalDiamondChance += (b.value / 100);
+                                   if (b.stat === 'ITEM_FIND_CHANCE') totalItemChance += (b.value / 100);
+                                   if (b.stat === 'GEM_FIND_CHANCE') totalGemChance += (b.value / 100);
                                });
                            }
                        });
@@ -118,24 +149,51 @@ export default function App() {
                    addGemBuffs(bird.gear.claws);
                    
                    totalIncome += baseIncome * (1 + (bonusPct / 100));
-                   totalDiamondChance += diamondChance;
                }
                return bird;
            });
            
            let diamondFound = 0;
-           if (totalDiamondChance > 0 && Math.random() < totalDiamondChance) {
+           // Also apply multiplier to diamond chance for "faster ticks" simulation
+           if (totalDiamondChance > 0 && Math.random() < (totalDiamondChance * multiplier)) {
                diamondFound = 1;
            }
+
+           let itemFound: Consumable | null = null;
+           if (totalItemChance > 0 && Math.random() < (totalItemChance * multiplier)) {
+               const type = Math.random() < 0.5 ? ConsumableType.HUNTING_SPEED : ConsumableType.BATTLE_REWARD;
+               const rarity = rollRarity(-1);
+               itemFound = { type, rarity, count: 1 };
+           }
+
+           let gemFound: Gem | null = null;
+           if (totalGemChance > 0 && Math.random() < (totalGemChance * multiplier)) {
+                gemFound = generateCraftedGem(0);
+           }
            
+           const newInventory = { ...prev.inventory };
+           if (itemFound) {
+               const existingIdx = newInventory.consumables.findIndex(c => c.type === itemFound!.type && c.rarity === itemFound!.rarity);
+               if (existingIdx !== -1) {
+                   newInventory.consumables[existingIdx].count += 1;
+               } else {
+                   newInventory.consumables.push(itemFound);
+               }
+           }
+           if (gemFound) {
+               newInventory.gems.push(gemFound);
+           }
+
            const newState = {
                ...prev,
                feathers: prev.feathers + totalIncome,
                scrap: prev.scrap + extraScrap,
                diamonds: prev.diamonds + diamondFound,
-               birds: birdsUpdated ? updatedBirds : prev.birds
+               birds: birdsUpdated ? updatedBirds : prev.birds,
+               inventory: newInventory,
+               activeBuffs: newActiveBuffs
            };
-           localStorage.setItem('bird_game_save_v6', JSON.stringify(newState));
+           localStorage.setItem('bird_game_save_v7', JSON.stringify(newState));
            return newState;
        });
     }, 1000);
@@ -157,6 +215,20 @@ export default function App() {
           if (birdIndex === -1) return prev; 
           
           const bird = { ...prev.birds[birdIndex] };
+          
+          // Apply Battle Reward Buffs Logic handled in BattleArena calculation for display
+          // Here we just accept the result values, but we need to decrement the buff duration
+          let newActiveBuffs = [...prev.activeBuffs];
+          const rewardBuffIndex = newActiveBuffs.findIndex(b => b.type === ConsumableType.BATTLE_REWARD);
+          
+          // Decrement Battle Reward buff if player won and had buff
+          if (rewardBuffIndex !== -1 && result.winner === 'player') {
+             newActiveBuffs[rewardBuffIndex].remaining -= 1;
+             if (newActiveBuffs[rewardBuffIndex].remaining <= 0) {
+                 newActiveBuffs.splice(rewardBuffIndex, 1);
+             }
+          }
+
           const newFeathers = prev.feathers + result.rewards.feathers;
           const newScrap = prev.scrap + result.rewards.scrap;
           const newDiamonds = prev.diamonds + result.rewards.diamonds;
@@ -178,6 +250,15 @@ export default function App() {
           if (result.rewards.gem) {
               newInventory.gems = [...newInventory.gems, result.rewards.gem];
           }
+          if (result.rewards.consumable) {
+              // Add consumable logic: check if exists, increment count, or push new
+              const existingIdx = newInventory.consumables.findIndex(c => c.type === result.rewards.consumable!.type && c.rarity === result.rewards.consumable!.rarity);
+              if (existingIdx !== -1) {
+                  newInventory.consumables[existingIdx].count += result.rewards.consumable.count;
+              } else {
+                  newInventory.consumables.push(result.rewards.consumable);
+              }
+          }
 
           return {
               ...prev,
@@ -186,7 +267,8 @@ export default function App() {
               diamonds: newDiamonds,
               highestZone: result.winner === 'player' ? Math.max(prev.highestZone, prev.highestZone) : prev.highestZone, 
               birds: updatedBirds,
-              inventory: newInventory
+              inventory: newInventory,
+              activeBuffs: newActiveBuffs
           };
       });
 
@@ -350,17 +432,57 @@ export default function App() {
       const refundScrap = Math.floor(UPGRADE_COSTS.CRAFT_SCRAP * 0.5 * config.minMult);
 
       setPlayerState(prev => {
-          const exists = prev.inventory.gear.find(g => g.id === gear.id);
-          const newGear = exists ? prev.inventory.gear.filter(g => g.id !== gear.id) : prev.inventory.gear;
+          // Check Inventory First
+          const invIndex = prev.inventory.gear.findIndex(g => g.id === gear.id);
+          if (invIndex !== -1) {
+              const newGear = [...prev.inventory.gear];
+              newGear.splice(invIndex, 1);
+              return {
+                  ...prev,
+                  feathers: prev.feathers + refundFeathers,
+                  scrap: prev.scrap + refundScrap,
+                  inventory: {
+                      ...prev.inventory,
+                      gear: newGear
+                  }
+              };
+          }
 
+          // Check Birds (Equipped)
+          let birdIndex = -1;
+          let slot: 'beak' | 'claws' | null = null;
+          for (let i = 0; i < prev.birds.length; i++) {
+              if (prev.birds[i].gear.beak?.id === gear.id) {
+                  birdIndex = i; slot = 'beak'; break;
+              }
+              if (prev.birds[i].gear.claws?.id === gear.id) {
+                  birdIndex = i; slot = 'claws'; break;
+              }
+          }
+
+          if (birdIndex !== -1 && slot) {
+              const newBirds = [...prev.birds];
+              newBirds[birdIndex] = {
+                  ...newBirds[birdIndex],
+                  gear: {
+                      ...newBirds[birdIndex].gear,
+                      [slot]: null
+                  }
+              };
+              return {
+                  ...prev,
+                  feathers: prev.feathers + refundFeathers,
+                  scrap: prev.scrap + refundScrap,
+                  birds: newBirds
+              };
+          }
+
+          // Case: Item not in inventory or birds (e.g. Salvage from Lab/Loot directly)
+          // Just refund the values
           return {
               ...prev,
               feathers: prev.feathers + refundFeathers,
-              scrap: prev.scrap + refundScrap,
-              inventory: {
-                  ...prev.inventory,
-                  gear: newGear
-              }
+              scrap: prev.scrap + refundScrap
           };
       });
   };
@@ -561,6 +683,40 @@ export default function App() {
       }));
   };
 
+  const handleUseConsumable = (type: ConsumableType, rarity: Rarity) => {
+      setPlayerState(prev => {
+          const invIdx = prev.inventory.consumables.findIndex(c => c.type === type && c.rarity === rarity);
+          if (invIdx === -1) return prev;
+          
+          // Remove item
+          const newConsumables = [...prev.inventory.consumables];
+          if (newConsumables[invIdx].count > 1) {
+              newConsumables[invIdx].count -= 1;
+          } else {
+              newConsumables.splice(invIdx, 1);
+          }
+
+          // Apply Buff
+          const config = CONSUMABLE_STATS[type].stats[rarity];
+          const newActiveBuffs = [...prev.activeBuffs];
+          const activeIdx = newActiveBuffs.findIndex(b => b.type === type);
+          
+          // If buff exists, replace it (or extend? prompt implies 'makes ticks faster for next X ticks', usually replace)
+          const buff = { type, rarity, multiplier: config.mult, remaining: config.duration };
+          if (activeIdx !== -1) {
+              newActiveBuffs[activeIdx] = buff; 
+          } else {
+              newActiveBuffs.push(buff);
+          }
+
+          return {
+              ...prev,
+              inventory: { ...prev.inventory, consumables: newConsumables },
+              activeBuffs: newActiveBuffs
+          };
+      });
+  };
+
   return (
     <div className="bg-slate-950 text-white font-sans overflow-x-hidden">
       {screen === GameScreen.MENU && (
@@ -721,6 +877,7 @@ export default function App() {
             initialTab={initialHubTab}
             onSocketGem={handleSocketGem}
             onUnsocketGem={handleUnsocketGem}
+            onUseConsumable={handleUseConsumable}
           />
       )}
 
@@ -730,6 +887,7 @@ export default function App() {
             playerBirdInstance={playerState.birds.find(b => b.instanceId === playerState.selectedBirdId)!}
             enemyLevel={playerState.highestZone} 
             onBattleComplete={handleBattleComplete}
+            activeBuffs={playerState.activeBuffs}
           />
       )}
 

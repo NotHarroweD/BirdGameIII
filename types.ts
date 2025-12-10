@@ -24,6 +24,7 @@ export enum SkillCheckType {
   TIMING = 'TIMING',
   MASH = 'MASH',
   COMBO = 'COMBO',
+  DRAIN_GAME = 'DRAIN_GAME',
 }
 
 export enum Rarity {
@@ -38,6 +39,11 @@ export enum Rarity {
 export enum GearType {
   BEAK = 'BEAK',
   CLAWS = 'CLAWS'
+}
+
+export enum ConsumableType {
+  HUNTING_SPEED = 'HUNTING_SPEED',
+  BATTLE_REWARD = 'BATTLE_REWARD'
 }
 
 export enum GameScreen {
@@ -56,7 +62,7 @@ export enum HubTab {
   UPGRADES = 'UPGRADES'
 }
 
-export type UtilityBuffType = 'XP_BONUS' | 'SCRAP_BONUS' | 'HUNT_BONUS' | 'FEATHER_BONUS' | 'DIAMOND_BATTLE_CHANCE' | 'DIAMOND_HUNT_CHANCE' | 'GEM_FIND_CHANCE';
+export type UtilityBuffType = 'XP_BONUS' | 'SCRAP_BONUS' | 'HUNT_BONUS' | 'FEATHER_BONUS' | 'DIAMOND_BATTLE_CHANCE' | 'DIAMOND_HUNT_CHANCE' | 'GEM_FIND_CHANCE' | 'ITEM_FIND_CHANCE';
 export type StatType = 'HP' | 'ATK' | 'DEF' | 'SPD' | 'NRG';
 
 export interface GearBuff {
@@ -87,6 +93,19 @@ export interface Gear {
   effectValue: number; // Crit Chance % for Beak, Bleed Damage % for Claws
   statBonuses: StatBonus[]; // New: Stat increases
   sockets: (Gem | null)[];
+}
+
+export interface Consumable {
+  type: ConsumableType;
+  rarity: Rarity;
+  count: number;
+}
+
+export interface ActiveBuff {
+  type: ConsumableType;
+  rarity: Rarity;
+  multiplier: number;
+  remaining: number; // Ticks (Seconds) for Hunting, Battles for Reward
 }
 
 export interface RarityTier {
@@ -224,10 +243,12 @@ export interface PlayerState {
   inventory: {
     gear: Gear[];
     gems: Gem[];
+    consumables: Consumable[];
     potions: number;
     revives: number;
   };
   upgrades: UpgradeState;
+  activeBuffs: ActiveBuff[];
 }
 
 export interface BattleResult {
@@ -238,6 +259,7 @@ export interface BattleResult {
     scrap: number;
     diamonds: number;
     gem?: Gem;
+    consumable?: Consumable;
   };
 }
 
@@ -261,4 +283,5 @@ export interface HubProps {
   onReleaseBird: (bird: BirdInstance) => void;
   onSocketGem: (gearId: string, gemId: string, socketIndex: number) => void;
   onUnsocketGem: (gearId: string, socketIndex: number) => void;
+  onUseConsumable: (type: ConsumableType, rarity: Rarity) => void;
 }
