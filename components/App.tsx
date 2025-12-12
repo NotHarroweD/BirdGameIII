@@ -1041,7 +1041,7 @@ export default function App() {
                  <div className="flex flex-col items-center justify-center w-full">
                     {/* Title Container */}
                     <div className="relative mb-6">
-                         <h1 className="text-7xl md:text-9xl font-tech font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400 text-center leading-[0.8] drop-shadow-2xl">
+                         <h1 className="text-7xl md:text-9xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400 text-center leading-[0.8] drop-shadow-2xl">
                             BIRD<br/>GAME
                         </h1>
                     </div>
@@ -1055,7 +1055,7 @@ export default function App() {
                     >
                          <div className="flex items-center gap-4 w-full justify-center opacity-80">
                             <div className="h-[1px] bg-gradient-to-l from-cyan-500/50 to-transparent w-16" />
-                            <span className="font-tech text-3xl md:text-4xl text-cyan-400 font-bold tracking-[0.2em] drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]">III</span>
+                            <span className=" text-3xl md:text-4xl text-cyan-400 font-bold tracking-[0.2em] drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]">III</span>
                             <div className="h-[1px] bg-gradient-to-r from-cyan-500/50 to-transparent w-16" />
                          </div>
 
@@ -1082,7 +1082,7 @@ export default function App() {
                              <path d="M20,2 L260,2 L278,20 L278,44 L260,62 L20,62 L2,44 L2,20 Z" fill="none" stroke="rgba(6,182,212,0.5)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
                          </svg>
 
-                         <span className="relative z-10 font-tech font-black text-xl tracking-[0.15em] text-white group-hover:text-cyan-200 transition-colors flex items-center justify-center gap-3">
+                         <span className="relative z-10 font-black text-xl tracking-[0.15em] text-white group-hover:text-cyan-200 transition-colors flex items-center justify-center gap-3">
                              <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
                              INITIALIZE
                              <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
