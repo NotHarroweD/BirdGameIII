@@ -1,12 +1,5 @@
+/// <reference types="vite/client" />
 
-
-declare global {
-  namespace NodeJS {
-    interface ProcessEnv {
-      API_KEY: string;
-      [key: string]: string | undefined;
-    }
-  }
-}
-
-export {}
+// Declare process as any to avoid conflicts with other type definitions
+// while allowing access to process.env.API_KEY
+declare const process: any;
