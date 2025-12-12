@@ -18,7 +18,7 @@ export default function App() {
 
   // Persistence
   const [playerState, setPlayerState] = useState<PlayerState>(() => {
-    const saved = localStorage.getItem('bird_game_save_v7'); 
+    return JSON.parse(JSON.stringify(INITIAL_PLAYER_STATE));
     if (saved) {
         try {
             const parsed = JSON.parse(saved);
