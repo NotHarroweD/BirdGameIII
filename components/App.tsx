@@ -171,8 +171,10 @@ export default function App() {
            const updatedBirds = prev.birds.map(bird => {
                if (prev.huntingBirdIds.includes(bird.instanceId)) {
                    // Calculate Resource Yield (same as before but per bird)
-                   const rarityMult = RARITY_CONFIG[bird.rarity].minMult;
-                   let baseIncome = (bird.huntingConfig.baseRate * rarityMult) * (1 + (bird.level * 0.1));
+                  const rarityConfig = RARITY_CONFIG[bird.rarity];
+const rarityMult = rarityConfig ? rarityConfig.minMult : 1.0; 
+let baseIncome = (bird.huntingConfig.baseRate * rarityMult) * (1 + (bird.level * 0.1));
+
                    
                    // Apply Hunting Speed Buff Multiplier directly to yield
                    baseIncome *= multiplier;
