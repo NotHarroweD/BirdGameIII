@@ -120,7 +120,6 @@ export default function App() {
         }
     }
     return JSON.parse(JSON.stringify(INITIAL_PLAYER_STATE));
-  });
 
   const [selectedZone, setSelectedZone] = useState<number>(playerState.highestZone);
 
