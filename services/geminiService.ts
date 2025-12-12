@@ -16,7 +16,7 @@ export const getAITurn = async (
 ): Promise<AITurnResult> => {
   try {
     // Initialize inside the function to prevent startup errors
-    const ai = new GoogleGenAI({ apiKey: process.env.VITE_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
     const model = 'gemini-2.5-flash';
     
     // Construct the context for the AI
