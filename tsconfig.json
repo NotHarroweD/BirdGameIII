@@ -17,6 +17,7 @@
 
     /* Linting */
     "strict": true,
+    "types": ["node", "vite/client"],
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
