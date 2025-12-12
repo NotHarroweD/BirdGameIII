@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { Hub } from './components/Hub';
-import { BattleArena } from './components/BattleArena';
-import { CatchScreen } from './components/CatchScreen';
-import { BirdSelection } from './components/BirdSelection';
-import { PlayerState, GameScreen, BirdInstance, BattleResult, GearType, HubTab, Gear, Rarity, UpgradeState, GearBuff, Gem, ConsumableType, Consumable, Bird, APShopState, UnlocksState } from './types';
-import { INITIAL_PLAYER_STATE, XP_TABLE, UPGRADE_COSTS, generateCraftedGear, RARITY_CONFIG, UPGRADE_DEFINITIONS, generateCraftedGem, CONSUMABLE_STATS, rollRarity, BIRD_TEMPLATES, generateBird, ACHIEVEMENTS, AP_SHOP_ITEMS } from './constants';
+import { Hub } from './Hub';
+import { BattleArena } from './BattleArena';
+import { CatchScreen } from './CatchScreen';
+import { BirdSelection } from './BirdSelection';
+import { PlayerState, GameScreen, BirdInstance, BattleResult, GearType, HubTab, Gear, Rarity, UpgradeState, GearBuff, Gem, ConsumableType, Consumable, Bird, APShopState, UnlocksState } from '../types';
+import { INITIAL_PLAYER_STATE, XP_TABLE, UPGRADE_COSTS, generateCraftedGear, RARITY_CONFIG, UPGRADE_DEFINITIONS, generateCraftedGem, CONSUMABLE_STATS, rollRarity, BIRD_TEMPLATES, generateBird, ACHIEVEMENTS, AP_SHOP_ITEMS } from '../constants';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from './components/Button';
+import { Button } from './Button';
 import { Lock, Unlock, Database, Hammer, ArrowRight, Beaker } from 'lucide-react';
 
 export default function App() {
@@ -998,15 +998,16 @@ export default function App() {
           }));
           
           if (unlockModalZone !== null) {
-              const featureMap: Record<string, HubTab> = {
+              const featureMap: Partial<Record<keyof UnlocksState, HubTab>> = {
                   'workshop': HubTab.LAB,
                   'clawCrafting': HubTab.LAB,
                   'gemCrafting': HubTab.LAB,
                   'upgrades': HubTab.UPGRADES,
                   'achievements': HubTab.ACHIEVEMENTS
               };
-              if (featureMap[feature]) {
-                  setInitialHubTab(featureMap[feature]);
+              const targetTab = featureMap[feature];
+              if (targetTab) {
+                  setInitialHubTab(targetTab);
                   setScreen(GameScreen.HUB);
               }
               setUnlockModalZone(null);
@@ -1172,7 +1173,7 @@ export default function App() {
               >
                   <motion.div 
                     initial={{ scale: 0.8, y: 50 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8, y: 50 }}
-                    className="bg-slate-900 border-2 border-cyan-500/50 p-8 rounded-2xl max-w-md w-full relative flex flex-col items-center shadow-[0_0_50px_rgba(6,182,212,0.2)]"
+                    className="bg-slate-900 border-2 border-cyan-500/50 p-8 rounded-2xl max-w-sm w-full relative flex flex-col items-center shadow-[0_0_50px_rgba(6,182,212,0.2)]"
                   >
                       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent" />
                       <Unlock size={48} className="text-cyan-400 mb-4 animate-pulse" />

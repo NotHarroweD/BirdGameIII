@@ -23,7 +23,9 @@ export const BirdSelection: React.FC<BirdSelectionProps> = ({ onSelect }) => {
           <h1 className="font-tech text-4xl text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 uppercase font-black italic">
             Class Selection
           </h1>
-          <p className="text-slate-400 text-sm mt-2 uppercase tracking-widest">Choose your combatant</p>
+          <p className="text-slate-400 text-xs md:text-sm mt-2 uppercase tracking-widest leading-relaxed">
+            Select from different kinds of birds that each specialize in unique combat tactics.
+          </p>
         </div>
 
         <div className="flex flex-col gap-4 md:flex-grow md:overflow-y-auto pr-2">
