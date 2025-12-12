@@ -1,14 +1,8 @@
 
 import React from 'react';
 import { PlayerState, ConsumableType, Gear } from '../types';
-import { ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Map, Swords, Lock, Skull, Target, ArrowUpRight, Zap, Award, Hammer, Gem, Briefcase, Hexagon, Trophy } from 'lucide-react';
-
-const CheckIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
-        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-    </svg>
-);
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Swords, Lock, Target, ArrowUpRight, Zap, Award, Hammer, Gem, Briefcase, Hexagon } from 'lucide-react';
 
 interface MapViewProps {
   playerState: PlayerState;
@@ -19,7 +13,8 @@ interface MapViewProps {
 
 export const MapView: React.FC<MapViewProps> = ({ playerState, onBattle, currentZone, onSelectZone }) => {
   const highestZone = playerState.highestZone;
-  const isHunting = playerState.selectedBirdId && playerState.huntingBirdIds.includes(playerState.selectedBirdId);
+  // Fix: Cast to boolean using !! to prevent returning "" (empty string) which causes TS error on disabled prop
+  const isHunting = !!(playerState.selectedBirdId && playerState.huntingBirdIds.includes(playerState.selectedBirdId));
   const selectedBird = playerState.birds.find(b => b.instanceId === playerState.selectedBirdId);
 
   // --- Calculate Active Battle Boosts ---
