@@ -1177,7 +1177,7 @@ export default function App() {
                   >
                       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent" />
                       <Unlock size={48} className="text-cyan-400 mb-4 animate-pulse" />
-                      <h2 className="font-tech text-3xl text-white mb-1 uppercase tracking-widest text-center">
+                      <h2 className=" text-3xl text-white mb-1 uppercase tracking-widest text-center">
                           ZONE {unlockModalZone} CLEARED
                       </h2>
                       <div className="text-cyan-500 font-bold text-sm mb-6 uppercase tracking-wider">New Protocols Available</div>
