@@ -19,6 +19,7 @@ export default function App() {
   // Persistence
   const [playerState, setPlayerState] = useState<PlayerState>(() => {
     return JSON.parse(JSON.stringify(INITIAL_PLAYER_STATE));
+});
     if (saved) {
         try {
             const parsed = JSON.parse(saved);
