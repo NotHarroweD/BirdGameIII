@@ -1,5 +1,10 @@
 /// <reference types="vite/client" />
 
-// Declare process as any to avoid conflicts with other type definitions
-// while allowing access to process.env.API_KEY
-declare const process: any;
+// Explicitly declare global process variable for client-side usage (shimmed by Vite)
+// Using var allows merging with existing definitions without block-scope conflicts
+declare var process: {
+  env: {
+    API_KEY: string;
+    [key: string]: string | undefined;
+  }
+};
