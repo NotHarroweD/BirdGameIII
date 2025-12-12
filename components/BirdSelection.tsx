@@ -45,8 +45,19 @@ export const BirdSelection: React.FC<BirdSelectionProps> = ({ onSelect }) => {
                   : 'bg-slate-900/50 border-transparent hover:bg-slate-800 text-slate-400 hover:text-slate-200'}
               `}
             >
-              <div className="w-16 h-16 rounded overflow-hidden bg-slate-950 border border-slate-700 shrink-0">
-                <img src={bird.imageUrl} alt={bird.name} className="w-full h-full object-cover" />
+              <div className="w-20 h-20 rounded overflow-hidden bg-slate-950 border border-slate-700 shrink-0">
+                <img 
+                    src={bird.imageUrl} 
+                    alt={bird.name} 
+                    className="w-full h-full object-cover" 
+                    referrerPolicy="no-referrer" 
+                    onError={(e) => {
+                        const target = e.currentTarget;
+                        if (!target.src.includes('placehold.co')) {
+                            target.src = 'https://placehold.co/400x400/1e293b/475569?text=' + bird.name;
+                        }
+                    }}
+                />
               </div>
               <div className="text-left">
                 <div className="font-tech font-bold text-lg uppercase">{bird.name}</div>
@@ -81,6 +92,13 @@ export const BirdSelection: React.FC<BirdSelectionProps> = ({ onSelect }) => {
               src={selectedPreview.imageUrl} 
               className="w-full h-full object-cover opacity-40 grayscale-[30%] fixed md:absolute inset-0"
               alt="Background"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (!target.src.includes('placehold.co')) {
+                    target.src = 'https://placehold.co/800x800/1e293b/475569?text=' + selectedPreview.name;
+                }
+              }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-transparent" />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#020617_100%)]" />

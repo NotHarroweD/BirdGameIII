@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { PlayerState, BirdInstance, GearType, Rarity, Gear, Gem, ConsumableType } from '../types';
+import { PlayerState, BirdInstance, GearType, Rarity, Gear, Gem, ConsumableType, GearPrefix } from '../types';
 import { RARITY_CONFIG, BUFF_LABELS, ROSTER_BASE_CAPACITY, UPGRADE_COSTS } from '../constants';
 import { Button } from './Button';
 import { Card } from './Card';
-import { Swords, Wind, Shield, Heart, Zap, X, Target, Trash2, Eye, Hexagon, ArrowUpRight } from 'lucide-react';
+import { Swords, Wind, Shield, Heart, Zap, X, Target, Trash2, Eye, Hexagon, ArrowUpRight, Clock, Database, Hammer, Gem as GemIcon, Briefcase } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface RosterViewProps {
@@ -75,7 +75,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
       return baseRate * (1 + (bonusPct / 100));
   };
 
-  const huntingRate = calculateHuntingRate(selectedBird!);
+  const huntingRate = selectedBird ? calculateHuntingRate(selectedBird) : 0;
 
   const currentCapacity = ROSTER_BASE_CAPACITY + playerState.upgrades.rosterCapacityLevel;
 
@@ -85,6 +85,10 @@ export const RosterView: React.FC<RosterViewProps> = ({
       const addGear = (g: Gear | null) => {
           if (!g) return;
           bonuses.atk += g.attackBonus || 0;
+          // Apply Quality prefix flat damage
+          if (g.prefix === GearPrefix.QUALITY && g.paramValue) {
+              bonuses.atk += g.paramValue;
+          }
           if (g.statBonuses) {
               g.statBonuses.forEach(b => {
                   if (b.stat === 'ATK') bonuses.atk += b.value;
@@ -137,6 +141,18 @@ export const RosterView: React.FC<RosterViewProps> = ({
           addGemBuffs(bird.gear.claws);
       }
   });
+
+  // Calculate total passive rate
+  let totalPassiveRate = 0;
+  playerState.huntingBirdIds.forEach(id => {
+      const bird = playerState.birds.find(b => b.instanceId === id);
+      if (bird) {
+          totalPassiveRate += calculateHuntingRate(bird);
+      }
+  });
+  // Apply AP Boost to Total Rate
+  const apBoost = 1 + (playerState.apShop.featherBoost * 0.02);
+  totalPassiveRate *= apBoost * huntSpeedMult;
 
 
   const StatRow = ({icon, label, val, level, rarity, bonus}: {icon: React.ReactNode, label: string, val: number, level: number, rarity: Rarity, bonus: number}) => {
@@ -201,10 +217,120 @@ export const RosterView: React.FC<RosterViewProps> = ({
       setViewingSlot(null);
   };
 
+  const getPrefixLabel = (prefix?: GearPrefix) => {
+      if (prefix === GearPrefix.QUALITY) return 'Extra Atk';
+      if (prefix === GearPrefix.SHARP) return 'Bleed Dmg';
+      if (prefix === GearPrefix.GREAT) return 'Crit Chance';
+      return '';
+  };
+
+  const renderGearIconMini = (gear: Gear | null, type: 'beak' | 'claws') => {
+        if (!gear) return (
+            <div className="w-8 h-8 rounded bg-slate-950/50 border border-slate-800 flex items-center justify-center opacity-30">
+                {type === 'beak' ? <Swords size={14} /> : <Wind size={14} />}
+            </div>
+        );
+        
+        const gearConfig = RARITY_CONFIG[gear.rarity];
+        
+        return (
+            <div className={`relative w-8 h-8 rounded bg-slate-900 border ${gearConfig.borderColor} flex items-center justify-center shadow-sm`}>
+                {type === 'beak' ? <Swords size={14} className={gearConfig.color} /> : <Wind size={14} className={gearConfig.color} />}
+                {/* Sockets Dots */}
+                {gear.sockets && gear.sockets.length > 0 && (
+                    <div className="absolute -bottom-1 -right-1 flex gap-0.5 bg-slate-950 rounded px-0.5 border border-slate-800 shadow-sm z-10">
+                        {gear.sockets.map((gem, idx) => (
+                            <div 
+                                key={idx} 
+                                className={`w-1.5 h-1.5 rounded-full ${gem ? RARITY_CONFIG[gem.rarity].color.replace('text-', 'bg-') : 'bg-slate-700'}`} 
+                            />
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+  };
+
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-500">
       
-      {/* Detail View */}
+      {/* 1. Global Hunting Stats Dashboard */}
+      {anyHunting && (
+          <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-4 backdrop-blur-sm shadow-lg relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-3 opacity-10">
+                  <Target size={80} className="text-amber-400" />
+              </div>
+              
+              <div className="flex items-center justify-between mb-4 relative z-10">
+                  <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded bg-amber-900/20 flex items-center justify-center border border-amber-500/30">
+                          <Target size={16} className="text-amber-400" />
+                      </div>
+                      <div>
+                          <div className="text-xs font-bold text-amber-400 uppercase tracking-wider">Active Operations</div>
+                          <div className="text-[10px] text-slate-400">{playerState.huntingBirdIds.length} Units Deployed</div>
+                      </div>
+                  </div>
+                  <div className="text-right">
+                      <div className="text-[10px] text-slate-500 uppercase font-bold">Total Yield</div>
+                      <div className="text-xl font-mono font-bold text-emerald-400">+{totalPassiveRate.toFixed(1)}/s</div>
+                  </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 relative z-10">
+                  {huntSpeedMult > 1 && (
+                      <div className="bg-slate-950/50 p-2 rounded border border-emerald-900/50 flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 uppercase font-bold">
+                              <Clock size={12} className="text-emerald-400" /> Speed
+                          </div>
+                          <div className="font-mono text-emerald-400 font-bold">{huntSpeedMult}x</div>
+                      </div>
+                  )}
+                  {totalHuntBonus > 0 && (
+                      <div className="bg-slate-950/50 p-2 rounded border border-slate-800 flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 uppercase font-bold">
+                              <Database size={12} className="text-cyan-400" /> Yield
+                          </div>
+                          <div className="font-mono text-cyan-400 font-bold">+{totalHuntBonus}%</div>
+                      </div>
+                  )}
+                  {(totalDiamondChance > 0 || playerState.apShop.diamondBoost > 0) && (
+                      <div className="bg-slate-950/50 p-2 rounded border border-slate-800 flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 uppercase font-bold">
+                              <GemIcon size={12} className="text-blue-400" /> Diamond
+                          </div>
+                          <div className="font-mono text-blue-400 font-bold">+{totalDiamondChance.toFixed(1)}%</div>
+                      </div>
+                  )}
+                  {(totalItemChance > 0 || playerState.apShop.itemDropBoost > 0) && (
+                      <div className="bg-slate-950/50 p-2 rounded border border-slate-800 flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 uppercase font-bold">
+                              <Briefcase size={12} className="text-purple-400" /> Item
+                          </div>
+                          <div className="font-mono text-purple-400 font-bold">+{totalItemChance.toFixed(1)}%</div>
+                      </div>
+                  )}
+                  {(totalGemChance > 0 || playerState.apShop.gemDropBoost > 0) && (
+                      <div className="bg-slate-950/50 p-2 rounded border border-slate-800 flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 uppercase font-bold">
+                              <Hexagon size={12} className="text-rose-400" /> Gem
+                          </div>
+                          <div className="font-mono text-rose-400 font-bold">+{totalGemChance.toFixed(1)}%</div>
+                      </div>
+                  )}
+                  {(totalScrapChance > 0 || playerState.apShop.scrapBoost > 0) && (
+                      <div className="bg-slate-950/50 p-2 rounded border border-slate-800 flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 uppercase font-bold">
+                              <Hammer size={12} className="text-slate-300" /> Scrap
+                          </div>
+                          <div className="font-mono text-slate-300 font-bold">+{totalScrapChance}%</div>
+                      </div>
+                  )}
+              </div>
+          </div>
+      )}
+
+      {/* 2. Detail View */}
       {selectedBird ? (
         <Card variant="glass" rarity={selectedBird.rarity} className="clip-tech relative overflow-hidden">
              <div className={`absolute -right-20 -top-20 w-64 h-64 rounded-full blur-[100px] opacity-20 ${RARITY_CONFIG[selectedBird.rarity].glowColor.replace('shadow-', 'bg-')}`} />
@@ -212,7 +338,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
              <div className="relative z-10">
                 <div className="flex justify-between items-start mb-4">
                     <div>
-                        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Active Unit</div>
+                        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Selected Unit</div>
                         <h2 className="font-tech text-3xl font-bold text-white leading-none">{selectedBird.name}</h2>
                         <div className={`text-xs font-bold uppercase mt-1 ${RARITY_CONFIG[selectedBird.rarity].color}`}>
                              {RARITY_CONFIG[selectedBird.rarity].name} Class
@@ -227,10 +353,17 @@ export const RosterView: React.FC<RosterViewProps> = ({
                 {/* Compact Stats & Image Layout */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                      <div className="flex gap-4">
-                        <div className={`w-24 h-24 rounded-lg border-2 overflow-hidden bg-slate-950 shrink-0 shadow-lg ${RARITY_CONFIG[selectedBird.rarity].borderColor}`}>
-                            <img src={selectedBird.imageUrl} className="w-full h-full object-cover" />
+                        <div className={`w-32 h-32 md:w-48 md:h-48 rounded-lg border-2 overflow-hidden bg-slate-950 shrink-0 shadow-lg ${RARITY_CONFIG[selectedBird.rarity].borderColor}`}>
+                            <img 
+                                src={selectedBird.imageUrl} 
+                                className="w-full h-full object-cover" 
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                    e.currentTarget.src = 'https://placehold.co/400x400/1e293b/475569?text=' + selectedBird.name;
+                                }}
+                            />
                         </div>
-                        <div className="flex-1 bg-slate-900/50 p-2 rounded border border-slate-800 backdrop-blur-sm">
+                        <div className="flex-1 bg-slate-900/50 p-2 rounded border border-slate-800 backdrop-blur-sm flex flex-col justify-center">
                              <StatRow icon={<Heart size={12}/>} label="HP" val={selectedBird.baseHp} level={selectedBird.level} rarity={selectedBird.rarity} bonus={bonuses.hp} />
                              <StatRow icon={<Zap size={12}/>} label="NRG" val={selectedBird.baseEnergy} level={selectedBird.level} rarity={selectedBird.rarity} bonus={bonuses.nrg} />
                              <StatRow icon={<Swords size={12}/>} label="ATK" val={selectedBird.baseAttack} level={selectedBird.level} rarity={selectedBird.rarity} bonus={bonuses.atk} />
@@ -249,7 +382,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
                             <div className="text-[10px] text-slate-400 leading-tight">{selectedBird.passive.description}</div>
                         </div>
 
-                        {/* Hunting */}
+                        {/* Hunting Assignment */}
                         <div className="bg-slate-900/50 p-2 rounded border border-slate-800 flex-1">
                             <div className="flex items-center justify-between mb-1">
                                 <div className="flex items-center gap-2 text-amber-400 font-bold font-tech">
@@ -339,97 +472,88 @@ export const RosterView: React.FC<RosterViewProps> = ({
         <div className="p-8 text-center text-slate-500 italic">No bird selected.</div>
       )}
 
-      {/* Hunting Boosts Summary Panel */}
-      {anyHunting && (
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-              <div className="flex items-center gap-2 text-amber-400 mb-3 border-b border-slate-800 pb-2">
-                  <ArrowUpRight size={16} />
-                  <span className="font-tech font-bold uppercase">Active Hunting Boosts</span>
-              </div>
-              <div className="grid grid-cols-3 gap-3 text-xs">
-                  <div className="bg-slate-950/50 p-2 rounded border border-slate-800/50">
-                      <div className="text-slate-500 uppercase text-[9px] font-bold tracking-wider mb-0.5">Speed</div>
-                      <div className={`font-mono font-bold ${huntSpeedMult > 1 ? 'text-emerald-400' : 'text-white'}`}>
-                          {huntSpeedMult}x
-                      </div>
-                  </div>
-                  <div className="bg-slate-950/50 p-2 rounded border border-slate-800/50">
-                      <div className="text-slate-500 uppercase text-[9px] font-bold tracking-wider mb-0.5">Yield</div>
-                      <div className={`font-mono font-bold ${totalHuntBonus > 0 ? 'text-emerald-400' : 'text-white'}`}>
-                          +{totalHuntBonus}%
-                      </div>
-                  </div>
-                  <div className="bg-slate-950/50 p-2 rounded border border-slate-800/50">
-                      <div className="text-slate-500 uppercase text-[9px] font-bold tracking-wider mb-0.5">Diamond</div>
-                      <div className={`font-mono font-bold ${totalDiamondChance > 0 ? 'text-blue-400' : 'text-slate-400'}`}>
-                          +{totalDiamondChance.toFixed(1)}%
-                      </div>
-                  </div>
-                  <div className="bg-slate-950/50 p-2 rounded border border-slate-800/50">
-                      <div className="text-slate-500 uppercase text-[9px] font-bold tracking-wider mb-0.5">Item</div>
-                      <div className={`font-mono font-bold ${totalItemChance > 0 ? 'text-purple-400' : 'text-slate-400'}`}>
-                          +{totalItemChance.toFixed(1)}%
-                      </div>
-                  </div>
-                  <div className="bg-slate-950/50 p-2 rounded border border-slate-800/50">
-                      <div className="text-slate-500 uppercase text-[9px] font-bold tracking-wider mb-0.5">Scrap</div>
-                      <div className={`font-mono font-bold ${totalScrapChance > 0 ? 'text-slate-200' : 'text-slate-400'}`}>
-                          +{totalScrapChance}%
-                      </div>
-                  </div>
-                  <div className="bg-slate-950/50 p-2 rounded border border-slate-800/50">
-                      <div className="text-slate-500 uppercase text-[9px] font-bold tracking-wider mb-0.5">Gem</div>
-                      <div className={`font-mono font-bold ${totalGemChance > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
-                          +{totalGemChance.toFixed(1)}%
-                      </div>
-                  </div>
+      {/* 3. Bird List (Moved Below) */}
+      <div className="space-y-3">
+          <div className="flex justify-between items-center px-1">
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Roster ({playerState.birds.length}/{currentCapacity})
               </div>
           </div>
-      )}
+          
+          <div className="flex flex-col gap-2">
+              {playerState.birds.map(bird => {
+                  const isSelected = bird.instanceId === playerState.selectedBirdId;
+                  const isBirdHunting = playerState.huntingBirdIds.includes(bird.instanceId);
+                  const config = RARITY_CONFIG[bird.rarity];
+                  
+                  return (
+                      <button
+                          key={bird.instanceId}
+                          onClick={() => onSelectBird(bird.instanceId)}
+                          className={`
+                              relative w-full p-2 rounded-lg border-2 text-left transition-all overflow-hidden
+                              ${isSelected 
+                                  ? `bg-slate-800 ${config.borderColor} shadow-[0_0_15px_rgba(0,0,0,0.3)] scale-[1.01]` 
+                                  : `bg-slate-900 border-slate-800 hover:bg-slate-800 hover:border-slate-700`
+                              }
+                          `}
+                      >
+                          {isSelected && <div className={`absolute inset-0 bg-gradient-to-r ${config.glowColor.replace('shadow-', 'from-')}/5 to-transparent pointer-events-none`} />}
 
-      <div>
-         <div className="flex justify-between items-center mb-3 px-1">
-             <h3 className="font-tech text-lg text-slate-400">Collection</h3>
-             <span className="text-xs font-mono text-slate-500">
-                 {playerState.birds.length} / {currentCapacity}
-             </span>
-         </div>
-         <div className="space-y-2">
-            {playerState.birds.map(bird => (
-                <button
-                    key={bird.instanceId}
-                    onClick={() => onSelectBird(bird.instanceId)}
-                    className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all ${
-                        playerState.selectedBirdId === bird.instanceId 
-                        ? `bg-slate-800 border-cyan-500 shadow-lg` 
-                        : 'bg-slate-900 border-slate-800 hover:bg-slate-800'
-                    }`}
-                >
-                    <div className={`w-10 h-10 rounded border overflow-hidden relative shrink-0 ${RARITY_CONFIG[bird.rarity].borderColor}`}>
-                        <img src={bird.imageUrl} className="w-full h-full object-cover" />
-                        {playerState.huntingBirdIds.includes(bird.instanceId) && (
-                            <div className="absolute inset-0 bg-amber-500/50 flex items-center justify-center">
-                                <Target size={20} className="text-white drop-shadow-md animate-pulse" />
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex-1 text-left min-w-0">
-                        <div className="flex justify-between items-center">
-                            <span className={`font-bold text-sm truncate pr-2 ${playerState.selectedBirdId === bird.instanceId ? 'text-white' : 'text-slate-300'}`}>
-                                {bird.name}
-                            </span>
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded border whitespace-nowrap ${RARITY_CONFIG[bird.rarity].borderColor} ${RARITY_CONFIG[bird.rarity].color} bg-slate-950`}>
-                                {RARITY_CONFIG[bird.rarity].name}
-                            </span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 mt-0.5">Level {bird.level} • {bird.species}</div>
-                    </div>
-                    {playerState.selectedBirdId === bird.instanceId && (
-                        <div className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee] shrink-0" />
-                    )}
-                </button>
-            ))}
-         </div>
+                          <div className="flex items-center gap-4 relative z-10">
+                              {/* Avatar */}
+                              <div className={`w-14 h-14 rounded border bg-slate-950 shrink-0 overflow-hidden shadow-inner ${config.borderColor}`}>
+                                  <img 
+                                      src={bird.imageUrl} 
+                                      className="w-full h-full object-cover" 
+                                      referrerPolicy="no-referrer"
+                                      onError={(e) => {
+                                          const target = e.currentTarget;
+                                          if (!target.src.includes('placehold.co')) {
+                                              target.src = 'https://placehold.co/100x100/1e293b/475569?text=' + bird.name;
+                                          }
+                                      }}
+                                  />
+                              </div>
+
+                              {/* Info */}
+                              <div className="flex-1 min-w-0">
+                                  <div className="flex justify-between items-start mb-1">
+                                      <div>
+                                          <div className={`font-tech font-bold text-lg leading-none ${config.color} truncate pr-2`}>
+                                              {bird.name}
+                                          </div>
+                                          <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+                                              {bird.species} <span className="text-slate-600 mx-1">|</span> LVL {bird.level}
+                                          </div>
+                                      </div>
+                                      
+                                      {/* Status Badges */}
+                                      {isBirdHunting && (
+                                          <div className="flex items-center gap-1 text-[9px] font-bold text-amber-400 bg-amber-900/20 px-1.5 py-0.5 rounded border border-amber-500/30 animate-pulse shrink-0">
+                                              <Target size={10} /> HUNT
+                                          </div>
+                                      )}
+                                  </div>
+                                  
+                                  {/* Equipment Icons */}
+                                  <div className="flex items-center gap-2">
+                                      {renderGearIconMini(bird.gear.beak, 'beak')}
+                                      {renderGearIconMini(bird.gear.claws, 'claws')}
+                                  </div>
+                              </div>
+                          </div>
+                      </button>
+                  );
+              })}
+          </div>
+          
+          {/* Empty Slots Indicator */}
+          {playerState.birds.length < currentCapacity && (
+              <div className="text-center text-[10px] text-slate-600 border border-dashed border-slate-800 rounded-lg p-2 bg-slate-950/30">
+                  {currentCapacity - playerState.birds.length} Open Slots Available
+              </div>
+          )}
       </div>
 
       {/* --- MODALS --- */}
@@ -443,7 +567,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
               >
                   <motion.div 
                     initial={{y: 50}} animate={{y: 0}} exit={{y: 50}}
-                    className="bg-slate-900 border border-slate-700 p-6 rounded-xl max-w-sm w-full shadow-2xl" 
+                    className="bg-slate-900 border border-slate-700 p-6 rounded-xl max-w-sm w-full shadow-2xl max-h-[80vh] overflow-y-auto" 
                     onClick={e => e.stopPropagation()}
                   >
                       <div className="flex justify-between items-center mb-4">
@@ -451,7 +575,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
                           <button onClick={() => setEquipSlot(null)}><X size={20} className="text-slate-500" /></button>
                       </div>
                       
-                      <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                      <div className="space-y-2">
                           {playerState.inventory.gear.filter(g => g.type === (equipSlot === 'beak' ? GearType.BEAK : GearType.CLAWS)).length === 0 ? (
                               <div className="text-slate-500 text-sm text-center py-8 bg-slate-950/50 rounded-lg border border-dashed border-slate-800">
                                   No compatible gear in inventory.
@@ -462,11 +586,18 @@ export const RosterView: React.FC<RosterViewProps> = ({
                                 <button key={g.id} onClick={() => { onEquip(selectedBird.instanceId, g.id); setEquipSlot(null); }} className={`w-full p-3 rounded border flex justify-between items-center bg-slate-800 hover:bg-slate-700 transition-colors ${RARITY_CONFIG[g.rarity].borderColor}`}>
                                      <div>
                                         <div className={`text-sm font-bold ${RARITY_CONFIG[g.rarity].color}`}>{g.name}</div>
-                                        <div className="text-[10px] text-slate-400">ATK +{g.attackBonus} • Effect {g.effectValue}%</div>
+                                        <div className="text-[10px] text-slate-400 flex items-center">
+                                            <span className={`${RARITY_CONFIG[g.rarity].color} font-bold mr-1`}>ATK +{g.attackBonus}</span>
+                                            {g.prefix && g.paramValue && (
+                                                <span className="ml-1 text-cyan-400">
+                                                    • {getPrefixLabel(g.prefix)} {g.prefix === GearPrefix.QUALITY ? '+' : ''}{g.paramValue}{g.prefix === GearPrefix.QUALITY ? '' : '%'}
+                                                </span>
+                                            )}
+                                        </div>
                                         {g.statBonuses && g.statBonuses.length > 0 && (
                                             <div className="flex gap-1 mt-1 flex-wrap">
                                                 {g.statBonuses.map((b, i) => (
-                                                    <span key={i} className={`text-[9px] px-1 bg-slate-900 rounded text-slate-300 border border-slate-700`}>+{b.value} {BUFF_LABELS[b.stat] || b.stat}</span>
+                                                    <span key={i} className={`text-[9px] px-1 bg-slate-900 rounded ${RARITY_CONFIG[b.rarity].color} border border-slate-700`}>+{b.value} {BUFF_LABELS[b.stat] || b.stat}</span>
                                                 ))}
                                             </div>
                                         )}
@@ -489,7 +620,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
               >
                   <motion.div 
                     initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
-                    className="bg-slate-900 border border-slate-700 p-8 rounded-2xl max-w-sm w-full relative flex flex-col items-center shadow-2xl"
+                    className="bg-slate-900 border border-slate-700 p-8 rounded-2xl max-w-sm w-full relative flex flex-col items-center shadow-2xl max-h-[80vh] overflow-y-auto"
                     onClick={e => e.stopPropagation()}
                   >
                       {/* Close Button Added Here */}
@@ -506,7 +637,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
                            <div className={`w-20 h-20 rounded bg-slate-950 flex items-center justify-center border-2 mb-4 ${RARITY_CONFIG[viewingGear.rarity].borderColor}`}>
                                 {viewingGear.type === GearType.BEAK ? <Swords size={32} className={RARITY_CONFIG[viewingGear.rarity].color} /> : <Wind size={32} className={RARITY_CONFIG[viewingGear.rarity].color} />}
                            </div>
-                           <div className={`text-xl font-bold font-tech ${RARITY_CONFIG[viewingGear.rarity].color}`}>{viewingGear.name}</div>
+                           <div className={`text-xl font-bold font-tech ${RARITY_CONFIG[viewingGear.rarity].color} text-center`}>{viewingGear.name}</div>
                            <div className="text-sm font-bold uppercase tracking-widest text-slate-500">{RARITY_CONFIG[viewingGear.rarity].name} TIER</div>
                       </div>
                       
@@ -514,12 +645,16 @@ export const RosterView: React.FC<RosterViewProps> = ({
                       <div className="w-full grid grid-cols-2 gap-4 mb-4">
                           <div className="bg-slate-950 p-2 rounded border border-slate-800 text-center">
                               <div className="text-[10px] text-slate-500 uppercase">ATK Bonus</div>
-                              <div className="text-lg font-mono text-white">+{viewingGear.attackBonus}</div>
+                              <div className={`text-lg font-mono ${RARITY_CONFIG[viewingGear.rarity].color}`}>+{viewingGear.attackBonus}</div>
                           </div>
-                          <div className="bg-slate-950 p-2 rounded border border-slate-800 text-center">
-                              <div className="text-[10px] text-slate-500 uppercase">{viewingGear.type === GearType.BEAK ? 'Crit Chance' : 'Bleed Dmg'}</div>
-                              <div className="text-lg font-mono text-cyan-400">{viewingGear.effectValue}%</div>
-                          </div>
+                          {viewingGear.prefix && viewingGear.paramValue && (
+                              <div className="bg-slate-950 p-2 rounded border border-slate-800 text-center">
+                                  <div className="text-[10px] text-slate-500 uppercase">{getPrefixLabel(viewingGear.prefix)}</div>
+                                  <div className="text-lg font-mono text-cyan-400">
+                                      {viewingGear.prefix === GearPrefix.QUALITY ? '+' : ''}{viewingGear.paramValue}{viewingGear.prefix === GearPrefix.QUALITY ? '' : '%'}
+                                  </div>
+                              </div>
+                          )}
                       </div>
 
                       {/* Stat Bonuses */}
@@ -528,7 +663,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
                                <div className="text-[10px] text-slate-500 font-bold uppercase mb-2">Stat Boosts</div>
                                <div className="grid grid-cols-2 gap-2">
                                    {viewingGear.statBonuses.map((bonus, i) => (
-                                       <div key={i} className={`text-xs font-mono font-bold flex justify-between text-slate-300`}>
+                                       <div key={i} className={`text-xs font-mono font-bold flex justify-between ${RARITY_CONFIG[bonus.rarity].color}`}>
                                            <span>{BUFF_LABELS[bonus.stat] || bonus.stat}</span>
                                            <span>+{bonus.value}</span>
                                        </div>
@@ -603,7 +738,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
               >
                   <motion.div 
                     initial={{scale:0.9, y:20}} animate={{scale:1, y:0}} exit={{scale:0.9, y:20}}
-                    className="bg-slate-900 border border-slate-700 p-6 rounded-xl max-w-sm w-full shadow-2xl flex flex-col max-h-[80vh]"
+                    className="bg-slate-900 border border-slate-700 p-6 rounded-xl max-w-sm w-full shadow-2xl flex flex-col max-h-[80vh] overflow-y-auto"
                     onClick={e => e.stopPropagation()}
                   >
                       <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-4">

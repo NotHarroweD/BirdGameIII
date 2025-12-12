@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { PlayerState, HubTab, HubProps, ConsumableType, Rarity } from '../types';
 import { Navigation } from './Navigation';
@@ -6,6 +7,7 @@ import { LabView } from './LabView';
 import { MapView } from './MapView';
 import { InventoryView } from './InventoryView';
 import { UpgradesView } from './UpgradesView';
+import { AchievementsView } from './AchievementsView';
 import { Database, Activity, Target, Hammer, Gem, Clock, Award } from 'lucide-react';
 import { RARITY_CONFIG } from '../constants';
 
@@ -20,6 +22,7 @@ export const Hub: React.FC<HubProps> = ({
     onSalvageGear,
     onKeepGem,
     onSalvageGem,
+    onBatchSalvageGems,
     onEquip, 
     onUnequip,
     onAssignHunter,
@@ -29,9 +32,19 @@ export const Hub: React.FC<HubProps> = ({
     initialTab = HubTab.MAP,
     onSocketGem,
     onUnsocketGem,
-    onUseConsumable
+    onUseConsumable,
+    onClaimAchievement,
+    onBuyAPUpgrade,
+    onUnlockFeature,
+    currentZone,
+    onSelectZone
 }) => {
   const [activeTab, setActiveTab] = useState<HubTab>(initialTab);
+
+  // Switch to new tab if initialTab prop changes
+  React.useEffect(() => {
+      setActiveTab(initialTab);
+  }, [initialTab]);
 
   let passiveRate = 0;
   playerState.huntingBirdIds.forEach(id => {
@@ -46,6 +59,10 @@ export const Hub: React.FC<HubProps> = ({
   if (huntBuff) {
       passiveRate *= huntBuff.multiplier;
   }
+  
+  // Apply AP Boost to Display Rate
+  const apBoost = 1 + (playerState.apShop.featherBoost * 0.02);
+  passiveRate *= apBoost;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans">
@@ -137,6 +154,7 @@ export const Hub: React.FC<HubProps> = ({
                     onSocketGem={onSocketGem}
                     onUnsocketGem={onUnsocketGem}
                     onUseConsumable={onUseConsumable}
+                    onBatchSalvageGems={onBatchSalvageGems}
                   />
               </div>
           )}
@@ -152,6 +170,7 @@ export const Hub: React.FC<HubProps> = ({
                     onSalvageGear={onSalvageGear}
                     onKeepGem={onKeepGem}
                     onSalvageGem={onSalvageGem}
+                    onUnlockFeature={onUnlockFeature}
                   />
               </div>
           )}
@@ -160,7 +179,9 @@ export const Hub: React.FC<HubProps> = ({
               <div className="animate-in slide-in-from-right-4 duration-300">
                   <MapView 
                     playerState={playerState} 
-                    onBattle={onBattle} 
+                    onBattle={onBattle}
+                    currentZone={currentZone}
+                    onSelectZone={onSelectZone}
                   />
               </div>
           )}
@@ -170,12 +191,24 @@ export const Hub: React.FC<HubProps> = ({
                   <UpgradesView 
                     playerState={playerState}
                     onUpgrade={onUpgrade}
+                    onUnlockFeature={onUnlockFeature}
+                  />
+              </div>
+          )}
+
+          {activeTab === HubTab.ACHIEVEMENTS && (
+              <div className="animate-in slide-in-from-right-4 duration-300">
+                  <AchievementsView 
+                    playerState={playerState}
+                    onClaimAchievement={onClaimAchievement}
+                    onBuyAPUpgrade={onBuyAPUpgrade}
+                    onUnlockFeature={onUnlockFeature}
                   />
               </div>
           )}
       </div>
 
-      <Navigation activeTab={activeTab} onNavigate={setActiveTab} />
+      <Navigation activeTab={activeTab} onNavigate={setActiveTab} playerState={playerState} />
       
     </div>
   );

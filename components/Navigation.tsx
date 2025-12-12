@@ -1,46 +1,81 @@
 
 import React from 'react';
-import { HubTab } from '../types';
-import { ArrowUpCircle, Users, FlaskConical, Map, Package } from 'lucide-react';
+import { HubTab, PlayerState } from '../types';
+import { ArrowUpCircle, Users, FlaskConical, Map, Package, Trophy } from 'lucide-react';
+import { ACHIEVEMENTS } from '../constants';
 
 interface NavigationProps {
   activeTab: HubTab;
   onNavigate: (tab: HubTab) => void;
+  playerState?: PlayerState; // Optional for compatibility but used for notifications
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ activeTab, onNavigate }) => {
-  const navItems = [
-    { id: HubTab.MAP, icon: <Map size={20} />, label: 'Battle' },
-    { id: HubTab.ROSTER, icon: <Users size={20} />, label: 'Roster' },
-    { id: HubTab.INVENTORY, icon: <Package size={20} />, label: 'Items' },
-    { id: HubTab.LAB, icon: <FlaskConical size={20} />, label: 'Lab' },
-    { id: HubTab.UPGRADES, icon: <ArrowUpCircle size={20} />, label: 'Upgrades' },
+export const Navigation: React.FC<NavigationProps> = ({ activeTab, onNavigate, playerState }) => {
+  const allTabs = [
+    { id: HubTab.MAP, icon: Map, label: 'Map', requiresUnlock: false },
+    { id: HubTab.ROSTER, icon: Users, label: 'Roster', requiresUnlock: false },
+    { id: HubTab.LAB, icon: FlaskConical, label: 'Lab', requiresUnlock: false },
+    { id: HubTab.INVENTORY, icon: Package, label: 'Items', requiresUnlock: false },
+    { id: HubTab.UPGRADES, icon: ArrowUpCircle, label: 'Upgrade', requiresUnlock: true, unlockKey: 'upgrades' },
+    { id: HubTab.ACHIEVEMENTS, icon: Trophy, label: 'Glory', requiresUnlock: true, unlockKey: 'achievements' },
   ];
 
+  // Filter tabs based on unlocks
+  const visibleTabs = allTabs.filter(tab => {
+      if (!tab.requiresUnlock) return true;
+      if (!playerState) return false;
+      // @ts-ignore
+      return playerState.unlocks[tab.unlockKey];
+  });
+
+  // Calculate unclaimed achievements count if playerState is provided
+  const unclaimedAchievements = playerState ? ACHIEVEMENTS.filter(a => {
+      // @ts-ignore - Assuming lifetimeStats is populated correctly in state
+      const progress = playerState.lifetimeStats?.[a.statKey] || 0;
+      return !playerState.completedAchievementIds.includes(a.id) && progress >= a.targetValue;
+  }).length : 0;
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-16 bg-slate-900 border-t border-slate-800 flex items-stretch z-50 pb-safe">
-      {navItems.map((item) => {
-        const isActive = activeTab === item.id;
-        return (
-          <button
-            key={item.id}
-            onClick={() => onNavigate(item.id)}
-            className={`flex-1 flex flex-col items-center justify-center gap-1 transition-all relative ${
-              isActive ? 'text-cyan-400 bg-slate-800/50' : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            {/* Active Indicator Line */}
-            {isActive && (
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-cyan-500 shadow-[0_0_10px_#06b6d4]" />
-            )}
-            
-            <div className={`transition-transform duration-200 ${isActive ? 'scale-110' : 'scale-100'}`}>
-              {item.icon}
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wide">{item.label}</span>
-          </button>
-        );
-      })}
+    <div className="fixed bottom-0 left-0 right-0 bg-slate-950 border-t border-slate-800 pb-safe z-50 shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">
+      <div className="flex justify-around items-center px-2 py-2 md:py-3 max-w-4xl mx-auto">
+        {visibleTabs.map(tab => {
+          const isActive = activeTab === tab.id;
+          const Icon = tab.icon;
+          
+          return (
+            <button
+              key={tab.id}
+              onClick={() => onNavigate(tab.id)}
+              className={`relative flex flex-col items-center gap-1 p-2 rounded-lg transition-all duration-200 min-w-[56px] select-none touch-manipulation active:scale-95 ${
+                isActive 
+                  ? 'text-cyan-400 bg-cyan-950/20' 
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900/50'
+              }`}
+            >
+              <div className="relative">
+                  <Icon size={22} className={`transition-all duration-300 ${isActive ? 'drop-shadow-[0_0_8px_rgba(34,211,238,0.5)] scale-110' : ''}`} />
+                  
+                  {/* Notification Dot for Achievements */}
+                  {tab.id === HubTab.ACHIEVEMENTS && unclaimedAchievements > 0 && (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full border border-slate-900 flex items-center justify-center z-10">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      </div>
+                  )}
+              </div>
+              <span className={`text-[9px] font-bold uppercase tracking-wider transition-colors duration-200 ${isActive ? 'text-cyan-400' : 'text-slate-600'}`}>
+                {tab.label}
+              </span>
+              
+              {isActive && (
+                <div className="absolute bottom-0 w-8 h-0.5 bg-cyan-400 rounded-full shadow-[0_0_10px_rgba(34,211,238,0.8)]" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+      
+      {/* Mobile Safe Area Spacer */}
+      <div className="h-[env(safe-area-inset-bottom)] bg-slate-950" />
     </div>
   );
 };

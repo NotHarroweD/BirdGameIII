@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { PlayerState, UpgradeState } from '../types';
+import { PlayerState, UpgradeState, UnlocksState } from '../types';
 import { UPGRADE_DEFINITIONS } from '../constants';
 import { Button } from './Button';
 import { ArrowUpCircle, Hammer, Database, Gem } from 'lucide-react';
@@ -9,11 +9,12 @@ import { motion } from 'framer-motion';
 interface UpgradesViewProps {
   playerState: PlayerState;
   onUpgrade: (type: keyof UpgradeState) => void;
+  onUnlockFeature?: (feature: keyof UnlocksState) => void;
 }
 
 export const UpgradesView: React.FC<UpgradesViewProps> = ({ playerState, onUpgrade }) => {
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-6 pb-20 animate-in fade-in duration-500">
         <div className="text-center py-6">
             <h2 className="font-tech text-3xl text-white mb-2">SYSTEM UPGRADES</h2>
             <p className="text-slate-400 text-xs uppercase tracking-widest">Enhance Operations Efficiency</p>

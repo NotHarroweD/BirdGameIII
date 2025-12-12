@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { BirdInstance } from '../types';
 import { BIRD_TEMPLATES, generateBird, rollRarity, RARITY_CONFIG, UPGRADE_COSTS } from '../constants';
@@ -18,8 +19,11 @@ interface VisualPopup {
   text: string;
   subText?: string;
   color: string;
+  glowColor: string;
   scale: number;
   rotation: number;
+  x: number;
+  y: number;
 }
 
 interface VisualParticle {
@@ -30,13 +34,15 @@ interface VisualParticle {
   vy: number;
   life: number;
   color: string;
+  size: number;
+  type: 'spark' | 'debris';
+  angle: number; // For spark rotation
 }
 
 // Geometric Constants for SVG to prevent clipping
 const VIEWBOX_SIZE = 200;
 const CENTER_COORD = 100;
 const STROKE_WIDTH = 24;
-// Radius must be <= 100 - (24/2) = 88 to fit. Using 86 for safety margin.
 const MAIN_RADIUS = 86; 
 
 export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, catchRarityLevel, onKeepBird, onReleaseBird, isFirstCatch = false }) => {
@@ -49,13 +55,13 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
   const [battery, setBattery] = useState(3);
   const [catchMultiplier, setCatchMultiplier] = useState(1); // Starts at x1
   const [streak, setStreak] = useState(0);
-  const [bonusAvailable, setBonusAvailable] = useState(true); // Tracks if current layer can still yield multiplier
+  const [bonusAvailable, setBonusAvailable] = useState(true); 
   
   // Visual Effects State
   const [visualPopups, setVisualPopups] = useState<VisualPopup[]>([]);
   const [visualParticles, setVisualParticles] = useState<VisualParticle[]>([]);
   
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number | null>(null);
   const gameState = useRef({
     angle: 0,
     speed: 2,
@@ -66,7 +72,7 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
   });
   
   const wasInZoneRef = useRef(false);
-  const bonusAvailableRef = useRef(true); // Ref mirror for loop access
+  const bonusAvailableRef = useRef(true); 
 
   const [cursorAngle, setCursorAngle] = useState(0);
   const [targetZone, setTargetZone] = useState({ angle: 0, width: 60 });
@@ -74,19 +80,41 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
   
   const shakeControls = useAnimation();
 
+  const stopLoop = () => {
+    if (requestRef.current) cancelAnimationFrame(requestRef.current);
+  };
+
   // Particle Animation Loop
   useEffect(() => {
     let frameId: number;
     const updateParticles = () => {
         setVisualParticles(prev => {
             if (prev.length === 0) return prev;
-            return prev.map(p => ({
-                ...p,
-                x: p.x + p.vx,
-                y: p.y + p.vy,
-                vy: p.vy + 0.3, // Gravity
-                life: p.life - 0.02
-            })).filter(p => p.life > 0);
+            return prev.map(p => {
+                let newVx = p.vx;
+                let newVy = p.vy;
+                let newLife = p.life;
+
+                if (p.type === 'debris') {
+                    newVy += 0.4; // Gravity
+                    newLife -= 0.04;
+                } else if (p.type === 'spark') {
+                    newVx *= 0.90; // Air resistance
+                    newVy *= 0.90;
+                    newLife -= 0.06; // Fast decay
+                }
+
+                return {
+                    ...p,
+                    x: p.x + newVx,
+                    y: p.y + newVy,
+                    vx: newVx,
+                    vy: newVy,
+                    life: newLife,
+                    // Update angle for sparks to follow velocity
+                    angle: Math.atan2(newVy, newVx)
+                };
+            }).filter(p => p.life > 0);
         });
         frameId = requestAnimationFrame(updateParticles);
     };
@@ -97,10 +125,6 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
   useEffect(() => {
     return () => stopLoop();
   }, []);
-
-  const stopLoop = () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-  };
 
   const handleScan = () => {
     setPhase('detected');
@@ -121,18 +145,22 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
       const baseSpeed = 2 + (layerIndex * 1.5);
       const baseWidth = Math.max(30, 60 - (layerIndex * 10));
       const direction = layerIndex % 2 === 0 ? 1 : -1;
-      const randomAngle = Math.random() * 360;
+      
+      const targetAngle = Math.random() * 360;
+      const startAngle = (targetAngle + 180) % 360;
 
       gameState.current = {
-          angle: 0,
+          angle: startAngle,
           speed: baseSpeed,
           direction: direction as 1 | -1,
-          targetAngle: randomAngle,
+          targetAngle: targetAngle,
           targetWidth: baseWidth,
           isRunning: true
       };
 
-      setTargetZone({ angle: randomAngle, width: baseWidth });
+      setTargetZone({ angle: targetAngle, width: baseWidth });
+      setCursorAngle(startAngle);
+      
       setBonusAvailable(true);
       bonusAvailableRef.current = true;
       wasInZoneRef.current = false;
@@ -140,21 +168,16 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
       const loop = () => {
           if (!gameState.current.isRunning) return;
           
-          // Update Angle
           gameState.current.angle = (gameState.current.angle + (gameState.current.speed * gameState.current.direction)) % 360;
           if (gameState.current.angle < 0) gameState.current.angle += 360;
 
-          const currentAngle = gameState.current.angle;
-          setCursorAngle(currentAngle);
+          setCursorAngle(gameState.current.angle);
 
-          // Check Zone for "Pass By" Logic
-          const dist = Math.abs(currentAngle - gameState.current.targetAngle);
+          const dist = Math.abs(gameState.current.angle - gameState.current.targetAngle);
           const normalizedDist = dist > 180 ? 360 - dist : dist;
-          const inZone = normalizedDist <= (gameState.current.targetWidth / 2) + 5; // +5 tolerance for detection logic
+          const inZone = normalizedDist <= (gameState.current.targetWidth / 2) + 5; 
 
-          // If we were in the zone, and now we are NOT in the zone, we missed the window.
           if (wasInZoneRef.current && !inZone && bonusAvailableRef.current) {
-               // Missed the cycle
                setBonusAvailable(false);
                bonusAvailableRef.current = false;
           }
@@ -165,56 +188,128 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
       requestRef.current = requestAnimationFrame(loop);
   };
 
-  const spawnPopup = (text: string, type: 'good' | 'bad' | 'bonus' | 'neutral', subText?: string) => {
+  const spawnPopup = (text: string, type: 'good' | 'bad' | 'bonus' | 'neutral', subText?: string, overrideColor?: string, overrideGlow?: string, overrideScale?: number, customX?: number, customY?: number) => {
     const id = Math.random().toString();
     
     let color = 'text-white';
+    let glow = 'rgba(255,255,255,0.3)';
     let scale = 1.0;
 
     if (type === 'good') {
         color = 'text-emerald-400';
-        scale = 1.5;
+        glow = 'rgba(52, 211, 153, 0.5)';
+        scale = 1.1;
     } else if (type === 'bonus') {
         color = 'text-yellow-400';
-        scale = 2.0;
+        glow = 'rgba(250, 204, 21, 0.5)';
+        scale = 1.3;
     } else if (type === 'bad') {
         color = 'text-rose-500';
-        scale = 1.2;
+        glow = 'rgba(244, 63, 94, 0.5)';
+        scale = 1.0;
     } else if (type === 'neutral') {
         color = 'text-slate-400';
-        scale = 1.0;
+        glow = 'rgba(148, 163, 184, 0.3)';
+        scale = 0.9;
     }
+
+    if (overrideColor) color = overrideColor;
+    if (overrideGlow) glow = overrideGlow;
+    if (overrideScale) scale = overrideScale;
     
-    setVisualPopups(prev => [...prev, { id, text, subText, color, scale, rotation: (Math.random() - 0.5) * 20 }]);
-    setTimeout(() => setVisualPopups(prev => prev.filter(p => p.id !== id)), 1200);
+    // Position Logic: Default roughly centered if not provided
+    let x = customX;
+    let y = customY;
+
+    if (x === undefined || y === undefined) {
+        x = 0;
+        y = -80;
+    }
+
+    setVisualPopups(prev => [...prev, { id, text, subText, color, glowColor: glow, scale, rotation: (Math.random() - 0.5) * 10, x: x!, y: y! }]);
+    setTimeout(() => setVisualPopups(prev => prev.filter(p => p.id !== id)), 500); // Fast duration
   };
 
-  const spawnMultiplierPopup = (mult: number) => {
-      let color = 'text-emerald-400'; // x1
-      if (mult === 2) color = 'text-blue-400'; // x2
-      if (mult === 3) color = 'text-purple-400'; // x3
-      if (mult === 4) color = 'text-rose-500'; // x4
-      if (mult >= 5) color = 'text-yellow-400'; // x5
-
-      spawnPopup(`x${mult}`, 'good', color === 'text-yellow-400' ? 'MAX POWER!' : undefined);
-  };
-
-  const spawnExplosion = () => {
-     const count = 60;
+  const spawnExplosion = (x: number, y: number, color: string, intensity: number) => {
+     const count = 10 + (intensity * 6); 
      const newParticles: VisualParticle[] = [];
+     
      for(let i=0; i<count; i++) {
          const angle = Math.random() * Math.PI * 2;
-         const speed = Math.random() * 12 + 5;
+         const speed = (Math.random() * 6 + 4) * (1 + intensity * 0.2); 
+         
          newParticles.push({
              id: Math.random().toString(),
-             x: 0, y: 0, 
+             x, 
+             y, 
              vx: Math.cos(angle) * speed,
              vy: Math.sin(angle) * speed,
              life: 1.0,
-             color: i % 2 === 0 ? '#facc15' : '#fbbf24' // Gold variations
+             color: color,
+             size: Math.random() * 2 + 1 + (intensity * 0.5), 
+             type: Math.random() > 0.3 ? 'spark' : 'debris',
+             angle: angle
          });
      }
      setVisualParticles(prev => [...prev, ...newParticles]);
+  };
+
+  const spawnMultiplierPopup = (mult: number) => {
+      // Position Logic
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 100 + Math.random() * 20; 
+      const x = Math.cos(angle) * dist;
+      const y = Math.sin(angle) * dist;
+
+      let color = 'text-slate-300';
+      let glow = 'rgba(203, 213, 225, 0.2)';
+      let particleColor = '#cbd5e1'; 
+      let scale = 1.0;
+      let intensity = 1;
+      let sub = undefined;
+
+      if (mult === 1) { 
+          color = 'text-slate-300'; 
+          glow = 'rgba(203, 213, 225, 0.1)';
+          particleColor = '#e2e8f0';
+          scale = 1.0; 
+          intensity = 1;
+      }
+      else if (mult === 2) { 
+          color = 'text-emerald-400'; 
+          glow = 'rgba(52, 211, 153, 0.3)';
+          particleColor = '#34d399'; 
+          scale = 1.2; 
+          sub = "NICE";
+          intensity = 2;
+      }
+      else if (mult === 3) { 
+          color = 'text-blue-400'; 
+          glow = 'rgba(96, 165, 250, 0.4)';
+          particleColor = '#60a5fa'; 
+          scale = 1.4; 
+          sub = "GREAT";
+          intensity = 3;
+      }
+      else if (mult === 4) { 
+          color = 'text-purple-400'; 
+          glow = 'rgba(192, 132, 252, 0.5)';
+          particleColor = '#c084fc'; 
+          scale = 1.6; 
+          sub = "EPIC!";
+          intensity = 4;
+      }
+      else if (mult >= 5) { 
+          color = 'text-yellow-400'; 
+          glow = 'rgba(250, 204, 21, 0.6)';
+          particleColor = '#facc15'; 
+          scale = 1.8; 
+          sub = "MAX!";
+          intensity = 5;
+      }
+
+      spawnPopup(`x${mult}`, 'good', sub, color, glow, scale, x, y);
+      spawnExplosion(x, y, particleColor, intensity);
   };
 
   const handleTap = (e: React.PointerEvent) => {
@@ -226,7 +321,7 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
       let diff = Math.abs(angle - targetAngle);
       if (diff > 180) diff = 360 - diff;
 
-      const hit = diff <= (targetWidth / 2) + 4; // Slight hit tolerance
+      const hit = diff <= (targetWidth / 2) + 4; 
 
       if (hit) {
           setFlash('hit');
@@ -241,23 +336,20 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
               setStreak(newStreak);
               setCatchMultiplier(newMult);
               
-              // Perfect Streak Check (All 4 stages hit with bonus)
+              // Perfect Streak Check
               if (nextLayer >= LAYERS_TOTAL && newStreak === LAYERS_TOTAL) {
-                  // Clear previous popups to prevent overlap with the big finish
                   setVisualPopups([]);
-                  
                   setTimeout(() => {
-                      spawnPopup("PERFECT!", 'bonus', "x5 BONUS!");
-                      spawnExplosion();
-                      setCatchMultiplier(5); // Max out
+                      spawnPopup("PERFECT!", 'bonus', "x5 BONUS!", 'text-yellow-400', 'rgba(250, 204, 21, 0.8)', 2.0, 0, 0);
+                      spawnExplosion(0, 0, '#facc15', 6); 
+                      setCatchMultiplier(5); 
                   }, 50);
               } else {
                   spawnMultiplierPopup(newMult);
               }
 
           } else {
-              // Hit but missed rotation bonus
-              setStreak(0); // Reset streak
+              setStreak(0); 
               spawnPopup("HIT", 'neutral', "Too Slow");
           }
 
@@ -273,7 +365,7 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
       } else {
           setFlash('miss');
           setStreak(0);
-          setBonusAvailable(false); // Lose bonus for this layer if we miss tap
+          setBonusAvailable(false);
           bonusAvailableRef.current = false;
           
           shakeScreen();
@@ -297,7 +389,8 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
 
   const revealBird = (finalMult: number) => {
         const template = BIRD_TEMPLATES[Math.floor(Math.random() * BIRD_TEMPLATES.length)];
-        const rarity = rollRarity(catchRarityLevel + (catchMultiplier >= 5 ? 5 : catchMultiplier));
+        // Use new rollRarity signature with 'CATCH' context
+        const rarity = rollRarity(catchRarityLevel, 'CATCH', finalMult);
         const newBird = generateBird(template, rarity);
         setCaughtBird(newBird);
         setPhase('revealed');
@@ -333,10 +426,10 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
   
   const getMultColor = (m: number) => {
     if (m >= 5) return 'text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.8)]';
-    if (m === 4) return 'text-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.8)]';
-    if (m === 3) return 'text-purple-400 drop-shadow-[0_0_8px_rgba(192,132,252,0.8)]';
-    if (m === 2) return 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)]';
-    if (m === 1) return 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]';
+    if (m === 4) return 'text-purple-400 drop-shadow-[0_0_8px_rgba(192,132,252,0.8)]';
+    if (m === 3) return 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)]';
+    if (m === 2) return 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]';
+    if (m === 1) return 'text-slate-300 drop-shadow-[0_0_8px_rgba(148,163,184,0.8)]';
     return 'text-slate-600';
   }
 
@@ -418,7 +511,7 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
                     {flash === 'hit' && <div className="absolute inset-0 bg-emerald-500/10 pointer-events-none z-50 border-[20px] border-emerald-500/50" />}
                     {flash === 'miss' && <div className="absolute inset-0 bg-rose-500/10 pointer-events-none z-50 border-[20px] border-rose-500/50" />}
 
-                    {/* HUD Header - Consolidated Top Bar */}
+                    {/* HUD Header */}
                     <div className="absolute top-6 left-6 right-6 flex justify-between items-start pointer-events-none z-30">
                         {/* Battery Left */}
                         <div className="bg-slate-900/80 p-2.5 rounded border border-slate-700 backdrop-blur-sm shadow-lg">
@@ -461,7 +554,6 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
                     </div>
 
                     {/* Main Minigame Scaled Container */}
-                    {/* Using min(vw, vh) ensures it stays fully on screen and doesn't get cut off vertically on landscape or horizontally on mobile */}
                     <div 
                         className="relative flex items-center justify-center p-4 aspect-square shrink-0"
                         style={{ 
@@ -470,48 +562,54 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
                         }}
                     >
                         
-                        {/* Particles Layer */}
+                        {/* Particles Layer (Electric Sparks) */}
                         {visualParticles.map(p => (
                             <div 
                                 key={p.id}
-                                className="absolute rounded-full pointer-events-none z-40"
+                                className="absolute pointer-events-none z-40 mix-blend-screen"
                                 style={{
-                                    width: '8px', height: '8px',
+                                    width: p.type === 'spark' ? `${p.size * 3}px` : `${p.size}px`, 
+                                    height: `${p.size}px`,
                                     backgroundColor: p.color,
                                     left: `calc(50% + ${p.x}px)`,
                                     top: `calc(50% + ${p.y}px)`,
-                                    opacity: p.life,
-                                    transform: 'translate(-50%, -50%)',
-                                    boxShadow: `0 0 15px ${p.color}`
+                                    opacity: p.life * 0.8,
+                                    transform: `translate(-50%, -50%) rotate(${p.angle}rad)`, // Rotate based on velocity
+                                    boxShadow: `0 0 ${p.size * 2}px ${p.color}`
                                 }}
                             />
                         ))}
 
-                        {/* Arcade Popups Layer */}
+                        {/* Arcade Popups Layer (Transparent Ghost Text) */}
                         <AnimatePresence>
                             {visualPopups.map(p => (
                                 <motion.div
                                     key={p.id}
-                                    initial={{ scale: 0, opacity: 0, y: 0, rotate: p.rotation }}
-                                    animate={{ scale: p.scale, opacity: 1, y: -80 }}
-                                    exit={{ scale: p.scale * 1.2, opacity: 0, y: -120 }}
-                                    transition={{ duration: 0.5, type: 'spring', stiffness: 200 }}
-                                    className={`absolute pointer-events-none flex flex-col items-center z-50 whitespace-nowrap`}
+                                    initial={{ scale: 0, opacity: 0, x: p.x, y: p.y, rotate: p.rotation }}
+                                    animate={{ scale: p.scale, opacity: 0.7, x: p.x, y: p.y }}
+                                    exit={{ scale: p.scale * 1.1, opacity: 0, x: p.x * 1.1, y: p.y * 1.1 }}
+                                    transition={{ duration: 0.3, type: 'spring', stiffness: 300, damping: 20 }}
+                                    className={`absolute pointer-events-none flex flex-col items-center z-50 whitespace-nowrap mix-blend-screen`}
                                     style={{ transform: 'translate(-50%, -50%)' }}
                                 >
                                     <span 
-                                        className={`font-black text-6xl ${p.color} drop-shadow-[0_4px_0_rgba(0,0,0,1)]`}
+                                        className={`font-black ${p.color} font-tech`}
                                         style={{ 
-                                            WebkitTextStroke: '2px black',
-                                            textShadow: '0 0 20px rgba(0,0,0,0.5)'
+                                            fontSize: `${1.5 + (p.scale * 0.4)}rem`,
+                                            textShadow: `0 0 ${10 * p.scale}px ${p.glowColor}`
                                         }}
                                     >
                                         {p.text}
                                     </span>
                                     {p.subText && (
-                                        <span className="text-white font-bold text-sm bg-black/50 px-2 py-0.5 rounded border border-white/20 mt-1 uppercase tracking-widest">
+                                        <motion.span 
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            className="text-white font-bold bg-black/60 px-2 py-0.5 rounded border border-white/20 mt-1 uppercase tracking-widest shadow-lg backdrop-blur-sm"
+                                            style={{ fontSize: '0.6rem' }}
+                                        >
                                             {p.subText}
-                                        </span>
+                                        </motion.span>
                                     )}
                                 </motion.div>
                             ))}
@@ -603,7 +701,14 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
                 >
                     <div className={`absolute inset-0 rounded-full blur-3xl opacity-50 group-hover:opacity-80 transition-opacity duration-1000 ${RARITY_CONFIG[caughtBird.rarity].glowColor.replace('shadow-', 'bg-')}`} />
                     <div className={`w-56 h-56 rounded-full border-4 overflow-hidden bg-slate-900 shadow-2xl ${RARITY_CONFIG[caughtBird.rarity].borderColor} relative z-10`}>
-                        <img src={caughtBird.imageUrl} className="w-full h-full object-cover" />
+                        <img 
+                            src={caughtBird.imageUrl} 
+                            className="w-full h-full object-cover" 
+                            referrerPolicy="no-referrer" 
+                            onError={(e) => {
+                                e.currentTarget.src = 'https://placehold.co/400x400/1e293b/475569?text=' + caughtBird.name;
+                            }}
+                        />
                     </div>
                     <div className={`absolute bottom-0 right-0 w-12 h-12 bg-slate-900 rounded-full border-2 flex items-center justify-center z-20 ${RARITY_CONFIG[caughtBird.rarity].borderColor}`}>
                          <Database size={20} className={RARITY_CONFIG[caughtBird.rarity].color} />

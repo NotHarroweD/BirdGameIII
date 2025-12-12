@@ -1,9 +1,9 @@
 
-import React, { useState } from 'react';
-import { PlayerState, Gear, Gem, ConsumableType, Rarity } from '../types';
+import React, { useState, useRef } from 'react';
+import { PlayerState, Gear, Gem, ConsumableType, Rarity, GearPrefix } from '../types';
 import { RARITY_CONFIG, UPGRADE_COSTS, BUFF_LABELS, CONSUMABLE_STATS } from '../constants';
 import { Button } from './Button';
-import { Trash2, PackageOpen, Swords, Wind, Hexagon, X, Zap, Clock, Award, Briefcase } from 'lucide-react';
+import { Trash2, PackageOpen, Swords, Wind, Hexagon, X, Zap, Clock, Award, Briefcase, Check, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface InventoryViewProps {
@@ -12,6 +12,7 @@ interface InventoryViewProps {
   onSocketGem?: (gearId: string, gemId: string, socketIndex: number) => void;
   onUnsocketGem?: (gearId: string, socketIndex: number) => void;
   onUseConsumable?: (type: ConsumableType, rarity: Rarity) => void;
+  onBatchSalvageGems?: (gems: Gem[]) => void;
 }
 
 const RARITY_VALUE = {
@@ -23,9 +24,23 @@ const RARITY_VALUE = {
     [Rarity.MYTHIC]: 5
 };
 
-export const InventoryView: React.FC<InventoryViewProps> = ({ playerState, onSalvageGear, onSocketGem, onUnsocketGem, onUseConsumable }) => {
+export const InventoryView: React.FC<InventoryViewProps> = ({ 
+    playerState, 
+    onSalvageGear, 
+    onSocketGem, 
+    onUnsocketGem, 
+    onUseConsumable,
+    onBatchSalvageGems 
+}) => {
   const [activeTab, setActiveTab] = useState<'gear' | 'gems' | 'consumables'>('gear');
   const [socketTarget, setSocketTarget] = useState<{ gearId: string, index: number } | null>(null);
+
+  // Gem Management State
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedGemIds, setSelectedGemIds] = useState<Set<string>>(new Set());
+  const [confirmModalData, setConfirmModalData] = useState<{ gems: Gem[], totalFeathers: number, totalScrap: number } | null>(null);
+  
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getSalvageValues = (gear: Gear) => {
      const config = RARITY_CONFIG[gear.rarity];
@@ -52,6 +67,83 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ playerState, onSal
       }
   };
 
+  // --- Gem Selection Logic ---
+  const handleGemInteractionStart = (gemId: string) => {
+      if (isSelectionMode) return; // In selection mode, clicks are instant
+      
+      longPressTimerRef.current = setTimeout(() => {
+          setIsSelectionMode(true);
+          const newSet = new Set(selectedGemIds);
+          newSet.add(gemId);
+          setSelectedGemIds(newSet);
+          // Vibrate if supported
+          if (navigator.vibrate) navigator.vibrate(50);
+      }, 500);
+  };
+
+  const handleGemInteractionEnd = () => {
+      if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+      }
+  };
+
+  const handleGemClick = (gemId: string) => {
+      if (isSelectionMode) {
+          const newSet = new Set(selectedGemIds);
+          if (newSet.has(gemId)) {
+              newSet.delete(gemId);
+          } else {
+              newSet.add(gemId);
+          }
+          setSelectedGemIds(newSet);
+          if (newSet.size === 0) {
+              // Optional: Exit selection mode if empty? Keeping active for now.
+          }
+      }
+  };
+
+  const cancelSelectionMode = () => {
+      setIsSelectionMode(false);
+      setSelectedGemIds(new Set());
+  };
+
+  const handleSelectAll = () => {
+      const allIds = playerState.inventory.gems.map(g => g.id);
+      setSelectedGemIds(new Set(allIds));
+  };
+
+  const handleSalvageAllCommon = () => {
+      const commonGems = playerState.inventory.gems.filter(g => g.rarity === Rarity.COMMON);
+      if (commonGems.length === 0) return;
+      prepareBatchSalvage(commonGems);
+  };
+
+  const prepareBatchSalvage = (gems: Gem[]) => {
+      let totalFeathers = 0;
+      let totalScrap = 0;
+      
+      gems.forEach(gem => {
+           const config = RARITY_CONFIG[gem.rarity];
+           totalFeathers += Math.floor(UPGRADE_COSTS.CRAFT_GEM * 0.3);
+           totalScrap += Math.floor(UPGRADE_COSTS.CRAFT_GEM_SCRAP * 0.5 * config.minMult);
+      });
+
+      setConfirmModalData({
+          gems,
+          totalFeathers,
+          totalScrap
+      });
+  };
+
+  const handleConfirmSalvage = () => {
+      if (confirmModalData && onBatchSalvageGems) {
+          onBatchSalvageGems(confirmModalData.gems);
+          setConfirmModalData(null);
+          cancelSelectionMode();
+      }
+  };
+
   // Sort function: Ascending Rarity
   const sortByRarity = (a: { rarity: Rarity }, b: { rarity: Rarity }) => {
       return RARITY_VALUE[a.rarity] - RARITY_VALUE[b.rarity];
@@ -61,13 +153,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ playerState, onSal
   const sortedGems = [...playerState.inventory.gems].sort(sortByRarity);
   const sortedConsumables = [...playerState.inventory.consumables].sort(sortByRarity);
 
+  // Helper for gear details
+  const getPrefixLabel = (prefix?: GearPrefix) => {
+      if (prefix === GearPrefix.QUALITY) return 'Extra Atk';
+      if (prefix === GearPrefix.SHARP) return 'Bleed Dmg';
+      if (prefix === GearPrefix.GREAT) return 'Crit Chance';
+      return '';
+  };
+
   return (
     <div className="space-y-6 pb-20 relative animate-in fade-in duration-500">
       <div className="text-center py-6">
           <h2 className="font-tech text-3xl text-white mb-2 drop-shadow-md">SUPPLY DEPOT</h2>
           <div className="flex justify-center gap-2 mt-4 bg-slate-900/80 p-1 rounded-lg border border-slate-800 inline-flex backdrop-blur-sm">
               <button 
-                onClick={() => setActiveTab('gear')} 
+                onClick={() => { setActiveTab('gear'); cancelSelectionMode(); }} 
                 className={`px-6 py-2 rounded font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'gear' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
               >
                   Gear
@@ -79,7 +179,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ playerState, onSal
                   Gems
               </button>
               <button 
-                onClick={() => setActiveTab('consumables')} 
+                onClick={() => { setActiveTab('consumables'); cancelSelectionMode(); }} 
                 className={`px-6 py-2 rounded font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'consumables' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
               >
                   Items
@@ -134,8 +234,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ playerState, onSal
                                             </div>
                                             
                                             <div className="grid grid-cols-2 gap-2 text-xs font-mono text-slate-300 mt-2">
-                                                <div className="bg-slate-950/50 px-2 py-1 rounded border border-slate-800/50">ATK +{gear.attackBonus}</div>
-                                                <div className="bg-slate-950/50 px-2 py-1 rounded text-cyan-400 border border-slate-800/50">{gear.type === 'BEAK' ? 'CRIT' : 'BLEED'} {gear.effectValue}%</div>
+                                                <div className={`bg-slate-950/50 px-2 py-1 rounded border border-slate-800/50 ${RARITY_CONFIG[gear.rarity].color}`}>
+                                                    ATK +{gear.attackBonus}
+                                                </div>
+                                                {gear.prefix && gear.paramValue && (
+                                                    <div className="bg-slate-950/50 px-2 py-1 rounded text-cyan-400 border border-slate-800/50">
+                                                        {getPrefixLabel(gear.prefix)} {gear.prefix === GearPrefix.QUALITY ? '+' : ''}{gear.paramValue}{gear.prefix === GearPrefix.QUALITY ? '' : '%'}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -146,7 +252,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ playerState, onSal
                                               <div className="text-[9px] text-slate-500 font-bold uppercase mb-1">Bonus Stats</div>
                                               <div className="flex flex-wrap gap-2">
                                                   {gear.statBonuses.map((b, i) => (
-                                                      <div key={i} className={`text-[10px] px-2 py-1 bg-slate-950 rounded border border-slate-800 text-slate-300 font-mono`}>
+                                                      <div key={i} className={`text-[10px] px-2 py-1 bg-slate-950 rounded border border-slate-800 ${RARITY_CONFIG[b.rarity].color} font-mono`}>
                                                           +{b.value} {BUFF_LABELS[b.stat] || b.stat}
                                                       </div>
                                                   ))}
@@ -216,9 +322,26 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ playerState, onSal
 
       {activeTab === 'gems' && (
           <div className="space-y-4">
-              <div className="bg-slate-900 border border-slate-800 p-4 rounded-lg flex flex-col items-center shadow-lg">
-                    <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">Total Gems</div>
-                    <div className="text-2xl font-tech text-white">{sortedGems.length}</div>
+              <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-lg flex flex-col items-center shadow-lg">
+                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">Total Gems</div>
+                        <div className="text-2xl font-tech text-white">{sortedGems.length}</div>
+                  </div>
+                  {/* Salvage All Common Button (Always Visible if not empty) */}
+                  <div className="flex flex-col justify-center">
+                      <Button 
+                          size="sm" 
+                          variant="secondary" 
+                          onClick={handleSalvageAllCommon}
+                          disabled={!playerState.inventory.gems.some(g => g.rarity === Rarity.COMMON)}
+                          className="h-full border-slate-800"
+                      >
+                          <div className="flex flex-col items-center gap-1">
+                              <Trash2 size={16} className="text-slate-400" />
+                              <span className="text-[10px]">SALVAGE ALL WHITE</span>
+                          </div>
+                      </Button>
+                  </div>
               </div>
               
               {sortedGems.length === 0 ? (
@@ -228,22 +351,51 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ playerState, onSal
                       <div className="text-xs mt-1">Battle enemies to find Gems.</div>
                   </div>
               ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {sortedGems.map(gem => (
-                          <div key={gem.id} className={`bg-slate-900 border ${RARITY_CONFIG[gem.rarity].borderColor} p-3 rounded-lg flex flex-col items-center text-center relative overflow-hidden group hover:shadow-lg transition-all`}>
-                               <div className={`absolute inset-0 bg-gradient-to-b ${RARITY_CONFIG[gem.rarity].glowColor.replace('shadow-', 'from-')}/5 to-transparent pointer-events-none`} />
-                               <Hexagon size={24} className={`mb-2 ${RARITY_CONFIG[gem.rarity].color} drop-shadow-md group-hover:scale-110 transition-transform`} />
-                               <div className={`font-bold font-tech text-sm ${RARITY_CONFIG[gem.rarity].color} truncate w-full mb-1`}>{gem.name}</div>
-                               <div className={`text-[9px] px-1.5 rounded border bg-slate-950/50 mb-2 ${RARITY_CONFIG[gem.rarity].borderColor} ${RARITY_CONFIG[gem.rarity].color}`}>
-                                   {RARITY_CONFIG[gem.rarity].name}
-                               </div>
-                               <div className="w-full text-xs text-slate-300 space-y-1 bg-slate-950/30 p-1 rounded">
-                                   {gem.buffs.map((b, i) => (
-                                       <div key={i}>+{b.value}% {BUFF_LABELS[b.stat]}</div>
-                                   ))}
-                                </div>
+                  <div className="space-y-2">
+                      {/* Selection Hint */}
+                      {!isSelectionMode && (
+                          <div className="text-center text-[10px] text-slate-500 mb-2 italic">
+                              Long press any gem to manage selection
                           </div>
-                      ))}
+                      )}
+
+                      <div className="grid grid-cols-3 gap-3">
+                          {sortedGems.map(gem => {
+                              const isSelected = selectedGemIds.has(gem.id);
+                              
+                              return (
+                                  <div 
+                                    key={gem.id} 
+                                    className={`
+                                        bg-slate-900 border p-3 rounded-lg flex flex-col items-center text-center relative overflow-hidden transition-all cursor-pointer select-none
+                                        ${isSelected ? 'border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)] scale-95' : RARITY_CONFIG[gem.rarity].borderColor}
+                                        ${isSelectionMode && !isSelected ? 'opacity-60 grayscale-[0.5]' : ''}
+                                    `}
+                                    onPointerDown={() => handleGemInteractionStart(gem.id)}
+                                    onPointerUp={handleGemInteractionEnd}
+                                    onPointerLeave={handleGemInteractionEnd}
+                                    onClick={() => handleGemClick(gem.id)}
+                                  >
+                                       {isSelected && (
+                                           <div className="absolute top-1 right-1 z-20">
+                                               <div className="w-4 h-4 bg-cyan-500 rounded-full flex items-center justify-center shadow-md">
+                                                   <Check size={10} className="text-black stroke-[3]" />
+                                               </div>
+                                           </div>
+                                       )}
+
+                                       <div className={`absolute inset-0 bg-gradient-to-b ${RARITY_CONFIG[gem.rarity].glowColor.replace('shadow-', 'from-')}/5 to-transparent pointer-events-none`} />
+                                       <Hexagon size={24} className={`mb-2 ${RARITY_CONFIG[gem.rarity].color} drop-shadow-md`} />
+                                       <div className={`font-bold font-tech text-xs ${RARITY_CONFIG[gem.rarity].color} truncate w-full mb-1`}>{gem.name}</div>
+                                       <div className="w-full text-[9px] text-slate-300 space-y-0.5 bg-slate-950/30 p-1 rounded">
+                                           {gem.buffs.map((b, i) => (
+                                               <div key={i} className="truncate">+{b.value}% {BUFF_LABELS[b.stat]}</div>
+                                           ))}
+                                        </div>
+                                  </div>
+                              );
+                          })}
+                      </div>
                   </div>
               )}
           </div>
@@ -353,6 +505,83 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ playerState, onSal
                               ))}
                           </div>
                       )}
+                  </motion.div>
+              </motion.div>
+          )}
+      </AnimatePresence>
+
+      {/* Gem Selection Mode Bottom Bar */}
+      <AnimatePresence>
+          {isSelectionMode && activeTab === 'gems' && (
+              <motion.div 
+                  initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }}
+                  className="fixed bottom-24 left-4 right-4 z-50 max-w-4xl mx-auto"
+              >
+                  <div className="bg-slate-900 border border-slate-700 shadow-2xl p-3 rounded-xl flex items-center justify-between gap-4">
+                      <div className="text-sm font-bold text-white px-2">
+                          {selectedGemIds.size} Selected
+                      </div>
+                      <div className="flex items-center gap-2">
+                          <Button size="sm" variant="ghost" onClick={cancelSelectionMode}>CANCEL</Button>
+                          <Button 
+                              size="sm" 
+                              variant="danger" 
+                              disabled={selectedGemIds.size === 0}
+                              onClick={() => {
+                                  const gems = playerState.inventory.gems.filter(g => selectedGemIds.has(g.id));
+                                  prepareBatchSalvage(gems);
+                              }}
+                          >
+                              <Trash2 size={16} className="mr-2" /> SALVAGE
+                          </Button>
+                      </div>
+                  </div>
+              </motion.div>
+          )}
+      </AnimatePresence>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+          {confirmModalData && (
+              <motion.div 
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6"
+              >
+                  <motion.div 
+                      initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+                      className="bg-slate-900 border-2 border-rose-900 p-6 rounded-2xl max-w-sm w-full shadow-2xl"
+                  >
+                      <div className="flex flex-col items-center text-center">
+                          <div className="w-16 h-16 rounded-full bg-rose-900/20 flex items-center justify-center mb-4 border border-rose-800">
+                              <ShieldAlert size={32} className="text-rose-500" />
+                          </div>
+                          <h3 className="font-tech text-2xl text-white mb-2 uppercase">Confirm Salvage</h3>
+                          <p className="text-slate-400 text-sm mb-6">
+                              Are you sure you want to destroy 
+                              <strong className="text-white ml-1">{confirmModalData.gems.length} Gems</strong>?
+                              <br/>This action cannot be undone.
+                          </p>
+
+                          <div className="bg-slate-950 p-4 rounded-lg w-full mb-6 border border-slate-800">
+                              <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-2 text-center">Resources Returned</div>
+                              <div className="flex justify-center gap-6">
+                                  <div className="flex flex-col items-center">
+                                      <span className="text-cyan-400 font-mono font-bold text-xl">+{confirmModalData.totalFeathers}</span>
+                                      <span className="text-[9px] text-slate-500 uppercase">Feathers</span>
+                                  </div>
+                                  <div className="w-px bg-slate-800 h-8 self-center" />
+                                  <div className="flex flex-col items-center">
+                                      <span className="text-slate-300 font-mono font-bold text-xl">+{confirmModalData.totalScrap}</span>
+                                      <span className="text-[9px] text-slate-500 uppercase">Scrap</span>
+                                  </div>
+                              </div>
+                          </div>
+
+                          <div className="flex gap-3 w-full">
+                              <Button fullWidth variant="ghost" onClick={() => setConfirmModalData(null)}>CANCEL</Button>
+                              <Button fullWidth variant="danger" onClick={handleConfirmSalvage}>CONFIRM</Button>
+                          </div>
+                      </div>
                   </motion.div>
               </motion.div>
           )}
