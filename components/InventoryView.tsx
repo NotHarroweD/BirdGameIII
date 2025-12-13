@@ -429,8 +429,24 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                                       const stats = info.stats[item.rarity];
                                       const label = type === ConsumableType.HUNTING_SPEED ? `${stats.duration}s` : `${stats.duration} Battles`;
                                       
+                                      // Logic to check if item is usable based on active buff of the SAME TYPE
+                                      const activeBuff = playerState.activeBuffs.find(b => b.type === item.type);
+                                      let buttonText = "USE";
+                                      let isBlocked = false;
+
+                                      if (activeBuff) {
+                                          if (activeBuff.rarity === item.rarity) {
+                                              // Same type AND same rarity -> Stack
+                                              buttonText = item.type === ConsumableType.HUNTING_SPEED ? "ADD TIME" : "ADD BATTLES";
+                                          } else {
+                                              // Same type BUT different rarity -> Block
+                                              buttonText = "STAND BY";
+                                              isBlocked = true;
+                                          }
+                                      }
+
                                       return (
-                                          <div key={item.rarity} className={`bg-slate-950 p-3 rounded border ${RARITY_CONFIG[item.rarity].borderColor} relative flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow`}>
+                                          <div key={item.rarity} className={`bg-slate-950 p-3 rounded border ${RARITY_CONFIG[item.rarity].borderColor} relative flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow ${isBlocked ? 'opacity-50 grayscale' : ''}`}>
                                               <div>
                                                   <div className={`text-[10px] font-bold uppercase mb-1 ${RARITY_CONFIG[item.rarity].color} bg-slate-900/50 inline-block px-1 rounded`}>{RARITY_CONFIG[item.rarity].name}</div>
                                                   <div className="text-xs text-white font-mono mb-2">
@@ -444,8 +460,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                                                     size="sm" 
                                                     className="px-3 py-1 h-auto text-[10px]" 
                                                     onClick={() => onUseConsumable && onUseConsumable(type, item.rarity)}
+                                                    disabled={isBlocked}
+                                                    title={isBlocked ? "Cannot use different rarity while active" : "Use Item"}
                                                   >
-                                                      USE
+                                                      {buttonText}
                                                   </Button>
                                               </div>
                                           </div>

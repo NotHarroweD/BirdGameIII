@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Hub } from './Hub';
 import { BattleArena } from './BattleArena';
 import { CatchScreen } from './CatchScreen';
@@ -8,17 +8,20 @@ import { PlayerState, GameScreen, BirdInstance, BattleResult, GearType, HubTab, 
 import { INITIAL_PLAYER_STATE, XP_TABLE, UPGRADE_COSTS, generateCraftedGear, RARITY_CONFIG, UPGRADE_DEFINITIONS, generateCraftedGem, CONSUMABLE_STATS, rollRarity, BIRD_TEMPLATES, generateBird, ACHIEVEMENTS, AP_SHOP_ITEMS } from '../constants';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './Button';
-import { Lock, Unlock, Database, Hammer, ArrowRight, Beaker } from 'lucide-react';
+import { Lock, Unlock, Database, Hammer, ArrowRight, Beaker, Trash2, AlertTriangle } from 'lucide-react';
 
 export default function App() {
   const [screen, setScreen] = useState<GameScreen>(GameScreen.MENU);
   const [initialHubTab, setInitialHubTab] = useState<HubTab>(HubTab.MAP);
   const [battleKey, setBattleKey] = useState(0);
   const [unlockModalZone, setUnlockModalZone] = useState<number | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showTestButton, setShowTestButton] = useState(false);
+  const resetBtnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Persistence
   const [playerState, setPlayerState] = useState<PlayerState>(() => {
-    const saved = localStorage.getItem('bird_game_save_v7'); 
+    const saved = localStorage.getItem('bird_game_save_v8'); 
     if (saved) {
         try {
             const parsed = JSON.parse(saved);
@@ -143,7 +146,6 @@ export default function App() {
 
   // Auto-Save & Passive Hunting
   useEffect(() => {
-    // ... (unchanged auto-save logic)
     const interval = setInterval(() => {
        setPlayerState(prev => {
            // Handle Hunting Buffs
@@ -291,7 +293,7 @@ export default function App() {
                    totalScrap: prev.lifetimeStats.totalScrap + extraScrap
                }
            };
-           localStorage.setItem('bird_game_save_v7', JSON.stringify(newState));
+           localStorage.setItem('bird_game_save_v8', JSON.stringify(newState));
            return newState;
        });
     }, 1000);
@@ -307,6 +309,13 @@ export default function App() {
      }
   };
 
+  const handleResetData = () => {
+      localStorage.removeItem('bird_game_save_v8');
+      setPlayerState(JSON.parse(JSON.stringify(INITIAL_PLAYER_STATE)));
+      setShowResetConfirm(false);
+      setScreen(GameScreen.MENU);
+  };
+
   const handleTestStart = (bird: Bird) => {
       // Find template to ensure we have the base stat ranges for generation
       const template = BIRD_TEMPLATES.find(t => t.id === bird.id);
@@ -314,18 +323,40 @@ export default function App() {
 
       const newBird = generateBird(template, Rarity.MYTHIC); // Adult Class
       
-      setPlayerState(prev => ({
-          ...prev,
-          birds: [...prev.birds, newBird],
-          selectedBirdId: newBird.instanceId,
-          // Starter resources for testing
-          feathers: prev.feathers + 1000, 
-          scrap: prev.scrap + 200,
-          lifetimeStats: {
-              ...prev.lifetimeStats,
-              totalCatches: prev.lifetimeStats.totalCatches + 1
-          }
-      }));
+      setPlayerState(prev => {
+          // Add starter consumables for test mode
+          const newConsumables = [...prev.inventory.consumables];
+          const testItems = [
+              { type: ConsumableType.HUNTING_SPEED, rarity: Rarity.COMMON },
+              { type: ConsumableType.HUNTING_SPEED, rarity: Rarity.UNCOMMON },
+              { type: ConsumableType.HUNTING_SPEED, rarity: Rarity.RARE },
+              { type: ConsumableType.BATTLE_REWARD, rarity: Rarity.COMMON },
+              { type: ConsumableType.BATTLE_REWARD, rarity: Rarity.UNCOMMON },
+              { type: ConsumableType.BATTLE_REWARD, rarity: Rarity.RARE }
+          ];
+
+          testItems.forEach(item => {
+              newConsumables.push({ type: item.type, rarity: item.rarity, count: 3 });
+          });
+
+          return {
+              ...prev,
+              birds: [...prev.birds, newBird],
+              selectedBirdId: newBird.instanceId,
+              // Starter resources for testing
+              feathers: prev.feathers + 5000, 
+              scrap: prev.scrap + 1000,
+              diamonds: prev.diamonds + 100,
+              inventory: {
+                  ...prev.inventory,
+                  consumables: newConsumables
+              },
+              lifetimeStats: {
+                  ...prev.lifetimeStats,
+                  totalCatches: prev.lifetimeStats.totalCatches + 1
+              }
+          };
+      });
       setInitialHubTab(HubTab.MAP);
       setScreen(GameScreen.HUB);
   };
@@ -909,6 +940,15 @@ export default function App() {
 
   const handleUseConsumable = (type: ConsumableType, rarity: Rarity) => {
       setPlayerState(prev => {
+          // Check for active buff of the same type
+          const activeBuffIndex = prev.activeBuffs.findIndex(b => b.type === type);
+          const activeBuff = activeBuffIndex !== -1 ? prev.activeBuffs[activeBuffIndex] : null;
+          
+          // If a buff of same type is active, verify it matches rarity to allow stacking
+          if (activeBuff && activeBuff.rarity !== rarity) {
+              return prev;
+          }
+
           const invIdx = prev.inventory.consumables.findIndex(c => c.type === type && c.rarity === rarity);
           if (invIdx === -1) return prev;
           
@@ -921,13 +961,21 @@ export default function App() {
 
           const config = CONSUMABLE_STATS[type].stats[rarity];
           const newActiveBuffs = [...prev.activeBuffs];
-          const activeIdx = newActiveBuffs.findIndex(b => b.type === type);
           
-          const buff = { type, rarity, multiplier: config.mult, remaining: config.duration };
-          if (activeIdx !== -1) {
-              newActiveBuffs[activeIdx] = buff; 
+          if (activeBuff) {
+              // Stack Duration/Battles if matching existing
+              newActiveBuffs[activeBuffIndex] = { 
+                  ...activeBuff, 
+                  remaining: activeBuff.remaining + config.duration 
+              };
           } else {
-              newActiveBuffs.push(buff);
+              // Add New Buff
+              newActiveBuffs.push({ 
+                  type, 
+                  rarity, 
+                  multiplier: config.mult, 
+                  remaining: config.duration 
+              });
           }
 
           return {
@@ -1028,6 +1076,21 @@ export default function App() {
 
   const unlockInfo = unlockModalZone ? getUnlockDetails(unlockModalZone) : null;
 
+  // New functions for reset button long-press
+  const handleResetDown = () => {
+      resetBtnTimerRef.current = setTimeout(() => {
+          setShowTestButton(true);
+          if (navigator.vibrate) navigator.vibrate(100);
+      }, 2000);
+  };
+
+  const handleResetUp = () => {
+      if (resetBtnTimerRef.current) {
+          clearTimeout(resetBtnTimerRef.current);
+          resetBtnTimerRef.current = null;
+      }
+  };
+
   return (
     <div className="bg-slate-950 text-white font-sans overflow-x-hidden relative">
       {screen === GameScreen.MENU && (
@@ -1084,24 +1147,68 @@ export default function App() {
 
                          <span className="relative z-10 font-tech font-black text-xl tracking-[0.15em] text-white group-hover:text-cyan-200 transition-colors flex items-center justify-center gap-3">
                              <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
-                             INITIALIZE
+                             {playerState.birds && playerState.birds.length > 0 ? "RESUME MISSION" : "INITIALIZE"}
                              <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
                          </span>
                      </motion.button>
 
+                     {/* Hidden Test Deploy Button */}
+                     <AnimatePresence>
+                         {showTestButton && (
+                             <motion.button 
+                                onClick={() => setScreen(GameScreen.SELECTION)}
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="text-slate-600 text-xs font-mono uppercase tracking-widest hover:text-cyan-500 transition-colors flex items-center gap-2"
+                             >
+                                 <Beaker size={12} /> TEST DEPLOY
+                             </motion.button>
+                         )}
+                     </AnimatePresence>
+
+                     {/* Reset Data Button with Long Press */}
                      <motion.button 
-                        onClick={() => setScreen(GameScreen.SELECTION)}
+                        onClick={() => setShowResetConfirm(true)}
+                        onPointerDown={handleResetDown}
+                        onPointerUp={handleResetUp}
+                        onPointerLeave={handleResetUp}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        transition={{ delay: 1.5 }}
-                        className="text-slate-600 text-xs font-mono uppercase tracking-widest hover:text-cyan-500 transition-colors flex items-center gap-2"
+                        transition={{ delay: 1.6 }}
+                        className="text-slate-700 text-[10px] font-mono uppercase tracking-widest hover:text-rose-500 transition-colors flex items-center gap-2 mt-4 select-none"
                      >
-                         <Beaker size={12} /> TEST DEPLOY
+                         <Trash2 size={10} /> RESET SYSTEM DATA
                      </motion.button>
                  </div>
              </div>
          </div>
       )}
+
+      {/* Reset Confirmation Modal */}
+      <AnimatePresence>
+          {showResetConfirm && (
+              <motion.div 
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex items-center justify-center p-6"
+              >
+                  <motion.div 
+                    initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+                    className="bg-slate-900 border-2 border-rose-900 p-8 rounded-2xl max-w-sm w-full text-center shadow-2xl"
+                  >
+                      <AlertTriangle size={48} className="text-rose-500 mx-auto mb-4" />
+                      <h3 className="text-2xl font-tech text-white mb-2 uppercase">FACTORY RESET?</h3>
+                      <p className="text-slate-400 text-sm mb-6">
+                          This will wipe all progress, birds, and items. This action cannot be undone.
+                      </p>
+                      <div className="flex flex-col gap-3">
+                          <Button fullWidth variant="danger" onClick={handleResetData}>CONFIRM WIPE</Button>
+                          <Button fullWidth variant="ghost" onClick={() => setShowResetConfirm(false)}>CANCEL</Button>
+                      </div>
+                  </motion.div>
+              </motion.div>
+          )}
+      </AnimatePresence>
 
       {screen === GameScreen.SELECTION && (
           <BirdSelection onSelect={handleTestStart} />

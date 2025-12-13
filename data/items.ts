@@ -113,19 +113,18 @@ export const rollRarity = (upgradeLevel: number = 0, context: 'CATCH' | 'CRAFT' 
   // Base roll is 0-800.
   const baseRoll = Math.random() * 800;
   
-  // Level Bonus: +10 score per level.
-  // Helps push the base roll into higher tiers naturally over time.
-  const levelBonus = upgradeLevel * 10;
+  // Level Bonus: Adjusted scaling to prevent Mythic floods at high levels.
+  // Was 10 per level, now 2.5 per level.
+  const levelBonus = upgradeLevel * 2.5;
 
   let multiplierBonus = 0;
   
   // Catch Multiplier Logic 
-  // Designed so that at Level 0, you need x4/x5 to breach the Rare (850) threshold.
   if (context === 'CATCH') {
       if (multiplier >= 2) multiplierBonus += 20;
       if (multiplier >= 3) multiplierBonus += 40;
-      if (multiplier >= 4) multiplierBonus += 100; // +100 pushes max roll (800) to 900 (Rare is 850+)
-      if (multiplier >= 5) multiplierBonus += 250; // +250 pushes max roll to 1050 (Deep Rare)
+      if (multiplier >= 4) multiplierBonus += 100; 
+      if (multiplier >= 5) multiplierBonus += 250; 
   }
 
   const totalScore = baseRoll + levelBonus + multiplierBonus;
@@ -322,14 +321,14 @@ const generatePrefix = (rarity: Rarity): { prefix?: GearPrefix, value?: number }
     const tierMult = 1 + (rarityIdx * 0.5); // 1.0 to 3.5 multiplier
 
     if (prefix === GearPrefix.QUALITY) {
-        // Flat Attack Boost
-        value = Math.floor((5 + Math.random() * 5) * tierMult);
+        // Flat Attack Boost - Buffed
+        value = Math.floor((10 + Math.random() * 10) * tierMult);
     } else if (prefix === GearPrefix.SHARP) {
         // Bleed Damage %
         value = Math.floor((10 + Math.random() * 15) * tierMult);
     } else if (prefix === GearPrefix.GREAT) {
-        // Crit Damage %
-        value = Math.floor((15 + Math.random() * 25) * tierMult);
+        // Crit Damage % - Buffed
+        value = Math.floor((20 + Math.random() * 30) * tierMult);
     }
 
     return { prefix, value };

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { BirdInstance, BattleBird, Move, BattleLog, MoveType, Altitude, Weather, SkillCheckType, BattleResult, Rarity, Gear, StatType, Gem, ActiveBuff, ConsumableType, Consumable, APShopState, GearPrefix, EnemyPrefix } from '../types';
 import { BIRD_TEMPLATES, RARITY_CONFIG, rollRarity, generateBird, XP_TABLE, BUFF_LABELS, generateGem } from '../constants';
@@ -692,6 +693,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   const [gameTime, setGameTime] = useState(0);
   const startTimeRef = useRef(Date.now());
   const lastTickRef = useRef(Date.now());
+  const lastFrameTimeRef = useRef(Date.now()); // New ref to calculate frame delta properly
   const lastBleedTickRef = useRef(Date.now());
   const animationFrameRef = useRef<number>(0);
 
@@ -1180,31 +1182,58 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     const loop = () => {
       if (winnerRef.current) return;
       const now = Date.now();
-      const delta = now - lastTickRef.current;
+      
+      // Separate Frame Delta for smooth animation/minigame physics (16ms = 60fps target)
+      const frameDelta = now - lastFrameTimeRef.current;
+      lastFrameTimeRef.current = now;
+
+      // Tick Delta for game logic (Energy, AI)
+      const tickDelta = now - lastTickRef.current;
+
       if (skillCheckRef.current) {
           const check = skillCheckRef.current;
+          // Use frameDelta normalized to ~16ms frame time for consistent speed
+          const timeScale = frameDelta / 16.67;
+
           if (check.type === SkillCheckType.TIMING || check.type === SkillCheckType.COMBO) {
               const speed = check.type === SkillCheckType.COMBO && check.stage === 2 ? 2.5 : 1.5;
-              let p = check.progress + (speed * (delta/16)) * (check.direction || 1);
+              let p = check.progress + (speed * timeScale) * (check.direction || 1);
               if (p >= 100 || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1;
               check.progress = Math.max(0, Math.min(100, p));
               setActiveSkillCheck({...check});
           } else if (check.type === SkillCheckType.MASH) {
-              if (check.progress >= 100) { resolveMinigame(100); } else if (now - check.startTime > 3000) { resolveMinigame(); } else { setActiveSkillCheck(prev => prev ? ({...prev, progress: Math.max(0, prev.progress - (0.12 * (delta/16)))}) : null); }
+              if (check.progress >= 100) { resolveMinigame(100); } 
+              else if (now - check.startTime > 3000) { resolveMinigame(); } 
+              else { setActiveSkillCheck(prev => prev ? ({...prev, progress: Math.max(0, prev.progress - (0.12 * timeScale))}) : null); }
           } else if (check.type === SkillCheckType.DRAIN_GAME) {
-              if (check.stage === 1) { const speed = 2.0; let p = check.progress + (speed * (delta/16)) * (check.direction || 1); if (p >= 100 || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1; check.progress = Math.max(0, Math.min(100, p)); setActiveSkillCheck({...check}); } else { const speed = 3.0; let p = check.progress + (speed * (delta/16)) * (check.direction || 1); if (p >= 100 || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1; check.progress = Math.max(0, Math.min(100, p)); setActiveSkillCheck({...check}); }
+              if (check.stage === 1) { 
+                  const speed = 2.0; 
+                  let p = check.progress + (speed * timeScale) * (check.direction || 1); 
+                  if (p >= 100 || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1; 
+                  check.progress = Math.max(0, Math.min(100, p)); 
+                  setActiveSkillCheck({...check}); 
+              } else { 
+                  const speed = 3.0; 
+                  let p = check.progress + (speed * timeScale) * (check.direction || 1); 
+                  if (p >= 100 || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1; 
+                  check.progress = Math.max(0, Math.min(100, p)); 
+                  setActiveSkillCheck({...check}); 
+              }
           }
       }
+
       if (now - lastBleedTickRef.current > 1000) {
           lastBleedTickRef.current = now;
-          if (playerBirdRef.current.statusEffects.includes('bleed')) { setPlayerBird(prev => ({...prev, currentHp: Math.max(0, prev.currentHp - Math.floor(prev.maxHp * 0.05))})); spawnFloatingText("-BLEED", 'player', -30, 0, "text-rose-600"); }
-          if (opponentBirdRef.current.statusEffects.includes('bleed')) { setOpponentBird(prev => ({...prev, currentHp: Math.max(0, prev.currentHp - Math.floor(prev.maxHp * 0.05))})); spawnFloatingText("-BLEED", 'opponent', 30, 0, "text-rose-600"); }
-          const applyVulturePassive = (bird: BattleBird, setBird: React.Dispatch<React.SetStateAction<BattleBird>>, target: 'player'|'opponent') => { if (bird.id === 'vulture') { const heal = Math.ceil(bird.maxHp * 0.03); setBird(prev => ({ ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + heal) })); } };
+          if (playerBirdRef.current.statusEffects.includes('bleed')) { setPlayerBird(prev => ({...prev, currentHp: Math.max(0, prev.currentHp - Math.floor(prev.maxHp * 0.025))})); spawnFloatingText("-BLEED", 'player', -30, 0, "text-rose-600"); }
+          if (opponentBirdRef.current.statusEffects.includes('bleed')) { setOpponentBird(prev => ({...prev, currentHp: Math.max(0, prev.currentHp - Math.floor(prev.maxHp * 0.025))})); spawnFloatingText("-BLEED", 'opponent', 30, 0, "text-rose-600"); }
+          const applyVulturePassive = (bird: BattleBird, setBird: React.Dispatch<React.SetStateAction<BattleBird>>, target: 'player'|'opponent') => { if (bird.id === 'vulture') { const heal = Math.ceil(bird.maxHp * 0.015); setBird(prev => ({ ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + heal) })); } };
           applyVulturePassive(playerBirdRef.current, setPlayerBird, 'player');
           applyVulturePassive(opponentBirdRef.current, setOpponentBird, 'opponent');
       }
-      if (delta >= 100) {
-          const factor = delta/1000;
+
+      // Game Logic Tick (Energy Regen, AI)
+      if (tickDelta >= 100) {
+          const factor = tickDelta/1000;
           const applyEnergyRegen = (bird: BattleBird, setBird: React.Dispatch<React.SetStateAction<BattleBird>>) => { const baseRegen = 5; const effectiveRegen = bird.id === 'hummingbird' ? baseRegen * 1.5 : baseRegen; setBird(prev => ({...prev, currentEnergy: Math.min(prev.maxEnergy, prev.currentEnergy + (effectiveRegen * factor))})); };
           applyEnergyRegen(playerBirdRef.current, setPlayerBird);
           applyEnergyRegen(opponentBirdRef.current, setOpponentBird);
