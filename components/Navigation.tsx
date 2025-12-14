@@ -29,11 +29,26 @@ export const Navigation: React.FC<NavigationProps> = ({ activeTab, onNavigate, p
   });
 
   // Calculate unclaimed achievements count if playerState is provided
-  const unclaimedAchievements = playerState ? ACHIEVEMENTS.filter(a => {
-      // @ts-ignore - Assuming lifetimeStats is populated correctly in state
-      const progress = playerState.lifetimeStats?.[a.statKey] || 0;
-      return !playerState.completedAchievementIds.includes(a.id) && progress >= a.targetValue;
-  }).length : 0;
+  const unclaimedAchievements = playerState ? ACHIEVEMENTS.reduce((count, achievement) => {
+      // @ts-ignore
+      const currentValue = playerState.lifetimeStats?.[achievement.statKey] || 0;
+      let progress = currentValue;
+
+      // Adjust progress by baseline for cumulative stats
+      if (achievement.statKey !== 'highestZoneReached' && achievement.statKey !== 'maxPerfectCatchStreak' && achievement.statKey !== 'systemUnlocked') {
+          // @ts-ignore
+          const baseline = playerState.achievementBaselines?.[achievement.statKey] || 0;
+          progress = Math.max(0, currentValue - baseline);
+      }
+      
+      const hasUnclaimed = achievement.stages.some((stage, index) => {
+          const stageId = `${achievement.id}_stage_${index}`;
+          const isClaimed = playerState.completedAchievementIds.includes(stageId);
+          return !isClaimed && progress >= stage.targetValue;
+      });
+
+      return hasUnclaimed ? count + 1 : count;
+  }, 0) : 0;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-slate-950 border-t border-slate-800 pb-safe z-50 shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">

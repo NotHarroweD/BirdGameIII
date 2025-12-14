@@ -18,6 +18,9 @@ export default function App() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showTestButton, setShowTestButton] = useState(false);
   const resetBtnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Track temporary streak session for the catch screen
+  const [currentCatchStreak, setCurrentCatchStreak] = useState(0);
 
   // Persistence
   const [playerState, setPlayerState] = useState<PlayerState>(() => {
@@ -79,10 +82,24 @@ export default function App() {
                     totalScrap: parsed.scrap || 0,
                     totalCrafts: 0,
                     totalCatches: parsed.birds?.length || 0,
-                    battlesWon: 0, // Hard to retroactively know
-                    highestZoneReached: parsed.highestZone || 1
+                    battlesWon: 0, 
+                    highestZoneReached: parsed.highestZone || 1,
+                    maxPerfectCatchStreak: 0,
+                    systemUnlocked: parsed.unlocks?.achievements ? 1 : 0
                 };
+            } else {
+                if (parsed.lifetimeStats.maxPerfectCatchStreak === undefined) {
+                    parsed.lifetimeStats.maxPerfectCatchStreak = 0;
+                }
+                if (parsed.lifetimeStats.systemUnlocked === undefined) {
+                    parsed.lifetimeStats.systemUnlocked = parsed.unlocks?.achievements ? 1 : 0;
+                }
             }
+            
+            if (!parsed.achievementBaselines) {
+                parsed.achievementBaselines = {};
+            }
+
             if (!parsed.apShop) {
                 parsed.apShop = {
                     featherBoost: 0,
@@ -155,7 +172,7 @@ export default function App() {
 
            if (huntBuffIndex !== -1) {
                multiplier = newActiveBuffs[huntBuffIndex].multiplier;
-               newActiveBuffs[huntBuffIndex].remaining -= 1; // Decrease by 1 second
+               newActiveBuffs[huntBuffIndex].remaining -= 1; 
                if (newActiveBuffs[huntBuffIndex].remaining <= 0) {
                    newActiveBuffs.splice(huntBuffIndex, 1);
                }
@@ -174,7 +191,8 @@ export default function App() {
                if (prev.huntingBirdIds.includes(bird.instanceId)) {
                    // Calculate Resource Yield (same as before but per bird)
                    const rarityMult = RARITY_CONFIG[bird.rarity].minMult;
-                   let baseIncome = (bird.huntingConfig.baseRate * rarityMult) * (1 + (bird.level * 0.1));
+                   // Updated: Increased leveling passive benefit from 0.1 to 0.15
+                   let baseIncome = (bird.huntingConfig.baseRate * rarityMult) * (1 + (bird.level * 0.15));
                    
                    // Apply Hunting Speed Buff Multiplier directly to yield
                    baseIncome *= multiplier;
@@ -314,6 +332,25 @@ export default function App() {
       setPlayerState(JSON.parse(JSON.stringify(INITIAL_PLAYER_STATE)));
       setShowResetConfirm(false);
       setScreen(GameScreen.MENU);
+  };
+
+  // Called from CatchScreen when a catch attempt finishes
+  const handleReportCatchStats = (isPerfect: boolean) => {
+      if (isPerfect) {
+          setCurrentCatchStreak(prev => {
+              const newStreak = prev + 1;
+              setPlayerState(ps => ({
+                  ...ps,
+                  lifetimeStats: {
+                      ...ps.lifetimeStats,
+                      maxPerfectCatchStreak: Math.max(ps.lifetimeStats.maxPerfectCatchStreak, newStreak)
+                  }
+              }));
+              return newStreak;
+          });
+      } else {
+          setCurrentCatchStreak(0);
+      }
   };
 
   const handleTestStart = (bird: Bird) => {
@@ -986,14 +1023,19 @@ export default function App() {
       });
   };
 
-  const handleClaimAchievement = (id: string) => {
+  const handleClaimAchievement = (id: string, stageIndex: number) => {
       const achievement = ACHIEVEMENTS.find(a => a.id === id);
-      if (!achievement || playerState.completedAchievementIds.includes(id)) return;
+      if (!achievement || !achievement.stages[stageIndex]) return;
+      
+      const stageId = `${id}_stage_${stageIndex}`;
+      if (playerState.completedAchievementIds.includes(stageId)) return;
+
+      const reward = achievement.stages[stageIndex].apReward;
 
       setPlayerState(prev => ({
           ...prev,
-          ap: prev.ap + achievement.apReward,
-          completedAchievementIds: [...prev.completedAchievementIds, id]
+          ap: prev.ap + reward,
+          completedAchievementIds: [...prev.completedAchievementIds, stageId]
       }));
   };
 
@@ -1035,15 +1077,28 @@ export default function App() {
       }
 
       if (playerState.feathers >= costFeathers && playerState.scrap >= costScrap) {
-          setPlayerState(prev => ({
-              ...prev,
-              feathers: prev.feathers - costFeathers,
-              scrap: prev.scrap - costScrap,
-              unlocks: {
-                  ...prev.unlocks,
-                  [feature]: true
+          setPlayerState(prev => {
+              const newState = {
+                  ...prev,
+                  feathers: prev.feathers - costFeathers,
+                  scrap: prev.scrap - costScrap,
+                  unlocks: {
+                      ...prev.unlocks,
+                      [feature]: true
+                  }
+              };
+
+              // When Achievements are unlocked, snap the baseline stats and mark unlocked
+              if (feature === 'achievements') {
+                  newState.achievementBaselines = { ...prev.lifetimeStats };
+                  newState.lifetimeStats = {
+                      ...prev.lifetimeStats,
+                      systemUnlocked: 1
+                  };
               }
-          }));
+
+              return newState;
+          });
           
           if (unlockModalZone !== null) {
               const featureMap: Partial<Record<keyof UnlocksState, HubTab>> = {
@@ -1268,6 +1323,7 @@ export default function App() {
               onKeepBird={handleKeepBird}
               onReleaseBird={handleReleaseBird}
               isFirstCatch={playerState.birds.length === 0}
+              onReportCatchStats={handleReportCatchStats}
           />
       )}
 
@@ -1288,7 +1344,7 @@ export default function App() {
                           ZONE {unlockModalZone} CLEARED
                       </h2>
                       <div className="text-cyan-500 font-bold text-sm mb-6 uppercase tracking-wider">New Protocols Available</div>
-                      <div className="bg-slate-950/80 p-6 rounded-xl border border-slate-800 w-full mb-6">
+                      <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 w-full mb-6">
                           <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                               {unlockInfo.title}
                           </h3>

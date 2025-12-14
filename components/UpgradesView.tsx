@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { PlayerState, UpgradeState, UnlocksState } from '../types';
-import { UPGRADE_DEFINITIONS } from '../constants';
+import { UPGRADE_DEFINITIONS, getMaxCraftRarity, RARITY_CONFIG } from '../constants';
 import { Button } from './Button';
 import { ArrowUpCircle, Hammer, Database, Gem } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -32,6 +32,20 @@ export const UpgradesView: React.FC<UpgradesViewProps> = ({ playerState, onUpgra
                 
                 const canAfford = playerState.feathers >= featherCost && playerState.scrap >= scrapCost && playerState.diamonds >= diamondCost;
 
+                // Special handling for Rarity Unlocks
+                let nextUnlockText = "";
+                let maxRarityText = "";
+                if (def.id === 'craftRarityLevel' || def.id === 'gemRarityLevel') {
+                    const maxRarity = getMaxCraftRarity(currentLevel);
+                    maxRarityText = `MAX TIER: ${RARITY_CONFIG[maxRarity].name}`;
+                    
+                    const nextUnlockLevel = (Math.floor(currentLevel / 5) + 1) * 5;
+                    const levelsUntil = nextUnlockLevel - currentLevel;
+                    if (maxRarity !== 'MYTHIC') { // Only show if not maxed out rarity wise
+                        nextUnlockText = `Next Tier in ${levelsUntil} Lvls`;
+                    }
+                }
+
                 return (
                     <motion.div 
                         key={def.id}
@@ -47,13 +61,23 @@ export const UpgradesView: React.FC<UpgradesViewProps> = ({ playerState, onUpgra
                                 <div>
                                     <div className="font-tech font-bold text-lg text-white">{def.name}</div>
                                     <div className="text-xs text-slate-500 font-mono">
-                                        LEVEL {currentLevel} <span className="text-slate-700">/ {def.maxLevel}</span>
+                                        LEVEL {currentLevel} <span className="text-slate-700">/ {def.maxLevel > 1000 ? '∞' : def.maxLevel}</span>
                                     </div>
+                                    {maxRarityText && (
+                                        <div className="text-[10px] font-bold text-emerald-400 uppercase mt-0.5">
+                                            {maxRarityText}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <div className="text-right">
                                 <div className="text-xs font-bold text-cyan-400 uppercase tracking-wider">{def.effectPerLevel}</div>
                                 <div className="text-[9px] text-slate-500">PER LEVEL</div>
+                                {nextUnlockText && (
+                                    <div className="text-[9px] text-amber-400 font-bold mt-1 bg-amber-900/20 px-1 rounded inline-block">
+                                        {nextUnlockText}
+                                    </div>
+                                )}
                             </div>
                         </div>
                         

@@ -12,6 +12,7 @@ interface CatchScreenProps {
   onKeepBird: (bird: BirdInstance) => void;
   onReleaseBird: (bird: BirdInstance) => void;
   isFirstCatch?: boolean;
+  onReportCatchStats: (isPerfect: boolean) => void;
 }
 
 interface VisualPopup {
@@ -45,7 +46,7 @@ const CENTER_COORD = 100;
 const STROKE_WIDTH = 24;
 const MAIN_RADIUS = 86; 
 
-export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, catchRarityLevel, onKeepBird, onReleaseBird, isFirstCatch = false }) => {
+export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, catchRarityLevel, onKeepBird, onReleaseBird, isFirstCatch = false, onReportCatchStats }) => {
   const [phase, setPhase] = useState<'scanning' | 'detected' | 'catching' | 'revealed' | 'escaped'>('scanning');
   const [caughtBird, setCaughtBird] = useState<BirdInstance | null>(null);
 
@@ -357,7 +358,17 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
               setCurrentLayer(nextLayer);
               gameState.current.isRunning = false;
               stopLoop();
-              setTimeout(() => revealBird(bonusAvailableRef.current && streak === 3 ? 5 : catchMultiplier), 1000);
+              const finalMult = bonusAvailableRef.current && streak === 3 ? 5 : catchMultiplier; // streak === 3 at this point implies layer 0,1,2 were hits, and this tap makes layer 3 hit.
+              
+              // Correct logic: If we hit last layer and streak was perfect so far (which means current streak + 1 == total layers)
+              // Actually simpler: if finalMult >= 5, it's perfect.
+              if (finalMult >= 5) {
+                  onReportCatchStats(true); // Perfect catch
+              } else {
+                  onReportCatchStats(false); // Successful catch but not perfect
+              }
+
+              setTimeout(() => revealBird(finalMult), 1000);
           } else {
               setCurrentLayer(nextLayer);
               setupLayer(nextLayer);
@@ -378,6 +389,7 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
           if (newBattery <= 0) {
               gameState.current.isRunning = false;
               stopLoop();
+              onReportCatchStats(false); // Failed
               setPhase('escaped');
           }
       }
@@ -479,6 +491,7 @@ export const CatchScreen: React.FC<CatchScreenProps> = ({ dropRateMultiplier, ca
           </motion.div>
         )}
 
+        {/* ... (Previous states unchanged) ... */}
         {phase === 'detected' && (
            <motion.div 
              key="detected"

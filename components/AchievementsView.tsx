@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface AchievementsViewProps {
   playerState: PlayerState;
-  onClaimAchievement: (id: string) => void;
+  onClaimAchievement: (id: string, stageIndex: number) => void;
   onBuyAPUpgrade: (id: keyof APShopState) => void;
   onUnlockFeature?: (feature: keyof UnlocksState) => void;
 }
@@ -20,28 +20,22 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ playerState,
 
   const getProgress = (statKey: string) => {
       // @ts-ignore
-      return playerState.lifetimeStats[statKey] || 0;
+      const currentValue = playerState.lifetimeStats[statKey] || 0;
+      
+      // For absolute milestones (highest zone, max streak, system unlock), return current value directly
+      if (statKey === 'highestZoneReached' || statKey === 'maxPerfectCatchStreak' || statKey === 'systemUnlocked') {
+          return currentValue;
+      }
+
+      // For cumulative stats, subtract the baseline value at unlock time
+      // @ts-ignore
+      const baseline = playerState.achievementBaselines?.[statKey] || 0;
+      return Math.max(0, currentValue - baseline);
   };
 
   const getShopCost = (item: typeof AP_SHOP_ITEMS[0], currentLevel: number) => {
       return item.baseCost + (currentLevel * item.costScale);
   };
-
-  // Sort: Claimable first, then Incomplete, then Claimed
-  const sortedAchievements = [...ACHIEVEMENTS].sort((a, b) => {
-      const aProgress = getProgress(a.statKey);
-      const bProgress = getProgress(b.statKey);
-      const aComplete = completedSet.has(a.id);
-      const bComplete = completedSet.has(b.id);
-      const aReady = !aComplete && aProgress >= a.targetValue;
-      const bReady = !bComplete && bProgress >= b.targetValue;
-
-      if (aReady && !bReady) return -1;
-      if (!aReady && bReady) return 1;
-      if (!aComplete && bComplete) return -1;
-      if (aComplete && !bComplete) return 1;
-      return 0;
-  });
 
   return (
     <div className="space-y-6 pb-20 relative animate-in fade-in duration-500">
@@ -72,11 +66,23 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ playerState,
 
       {activeTab === 'milestones' && (
           <div className="space-y-3">
-              {sortedAchievements.map(ach => {
-                  const isCompleted = completedSet.has(ach.id);
+              {ACHIEVEMENTS.map(ach => {
                   const progress = getProgress(ach.statKey);
-                  const isReady = !isCompleted && progress >= ach.targetValue;
-                  const percentage = Math.min(100, (progress / ach.targetValue) * 100);
+                  
+                  // Find current active stage (first uncompleted)
+                  let currentStageIndex = ach.stages.findIndex((stage, idx) => !completedSet.has(`${ach.id}_stage_${idx}`));
+                  
+                  // If all completed, use last stage
+                  const allCompleted = currentStageIndex === -1;
+                  if (allCompleted) currentStageIndex = ach.stages.length - 1;
+
+                  const currentStage = ach.stages[currentStageIndex];
+                  const isReady = !allCompleted && progress >= currentStage.targetValue;
+                  
+                  // For display, if all completed, we show 100%
+                  const percentage = allCompleted ? 100 : Math.min(100, (progress / currentStage.targetValue) * 100);
+
+                  const stageDesc = currentStage.descriptionOverride || ach.description;
 
                   return (
                       <motion.div 
@@ -89,36 +95,36 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ playerState,
                           
                           <div className="flex-1 min-w-0 z-10 mr-4">
                               <div className="flex items-center gap-2 mb-1">
-                                  {isCompleted ? <CheckCircle size={16} className="text-emerald-500" /> : <Lock size={16} className="text-slate-600" />}
-                                  <div className={`font-bold font-tech text-sm ${isCompleted ? 'text-emerald-400' : isReady ? 'text-amber-100' : 'text-slate-300'}`}>
-                                      {ach.name}
+                                  {allCompleted ? <CheckCircle size={16} className="text-emerald-500" /> : <Lock size={16} className="text-slate-600" />}
+                                  <div className={`font-bold font-tech text-sm ${allCompleted ? 'text-emerald-400' : isReady ? 'text-amber-100' : 'text-slate-300'}`}>
+                                      {ach.name} <span className="text-xs font-mono opacity-50 ml-2">Stage {currentStageIndex + 1}/{ach.stages.length}</span>
                                   </div>
                               </div>
-                              <div className="text-xs text-slate-400 mb-2">{ach.description}</div>
+                              <div className="text-xs text-slate-400 mb-2">{stageDesc}</div>
                               
                               <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
                                   <motion.div 
-                                    className={`h-full ${isCompleted ? 'bg-emerald-500' : 'bg-amber-500'}`} 
+                                    className={`h-full ${allCompleted ? 'bg-emerald-500' : 'bg-amber-500'}`} 
                                     style={{ width: `${percentage}%` }} 
                                   />
                               </div>
                               <div className="flex justify-between mt-1">
-                                  <div className="text-[9px] text-slate-500 font-mono">{progress} / {ach.targetValue}</div>
-                                  <div className="text-[9px] text-amber-500 font-bold">{ach.apReward} AP</div>
+                                  <div className="text-[9px] text-slate-500 font-mono">{progress} / {currentStage.targetValue}</div>
+                                  {!allCompleted && <div className="text-[9px] text-amber-500 font-bold">Reward: {currentStage.apReward} AP</div>}
                               </div>
                           </div>
 
                           <div className="z-10 shrink-0">
-                              {isCompleted ? (
+                              {allCompleted ? (
                                   <div className="px-4 py-2 bg-slate-950/50 rounded border border-slate-800 text-slate-500 text-xs font-bold uppercase tracking-wider">
-                                      Claimed
+                                      Done
                                   </div>
                               ) : (
                                   <Button 
                                     size="sm" 
                                     className={`${isReady ? 'bg-amber-600 hover:bg-amber-500 border-amber-800' : 'opacity-50 grayscale'}`}
                                     disabled={!isReady}
-                                    onClick={() => onClaimAchievement(ach.id)}
+                                    onClick={() => onClaimAchievement(ach.id, currentStageIndex)}
                                   >
                                       Claim
                                   </Button>

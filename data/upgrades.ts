@@ -44,20 +44,20 @@ export const UPGRADE_DEFINITIONS: UpgradeDefinition[] = [
     {
         id: 'craftRarityLevel',
         name: 'Forge Level',
-        description: 'Upgrades the Forge to craft higher rarity gear and increase base stats of crafted items.',
+        description: 'Boosts crafted gear stats. Every 5 levels unlocks the next Rarity Tier.',
         baseCost: { feathers: 300, scrap: 100, diamonds: 0 },
         costMultiplier: 1.6,
-        maxLevel: 1000,
-        effectPerLevel: '+Stats & Luck'
+        maxLevel: 9999,
+        effectPerLevel: '+Stats / Rarity Cap'
     },
     {
         id: 'gemRarityLevel',
         name: 'Gemforge Mastery',
-        description: 'Increases the likelihood of creating higher rarity gems in the Gemforge.',
+        description: 'Boosts crafted gem strength. Every 5 levels unlocks the next Rarity Tier.',
         baseCost: { feathers: 800, scrap: 200, diamonds: 0 },
         costMultiplier: 1.7,
-        maxLevel: 1000,
-        effectPerLevel: '+Gem Luck'
+        maxLevel: 9999,
+        effectPerLevel: '+Stats / Rarity Cap'
     },
     {
         id: 'rosterCapacityLevel',

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { PlayerState, GearType, Gear, Gem, UpgradeState, UnlocksState, GearPrefix, Rarity } from '../types';
-import { UPGRADE_COSTS, RARITY_CONFIG, BUFF_LABELS, ROSTER_BASE_CAPACITY } from '../constants';
+import { UPGRADE_COSTS, RARITY_CONFIG, BUFF_LABELS, ROSTER_BASE_CAPACITY, getMaxCraftRarity } from '../constants';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Swords, Wind, Star, Hammer, X, Trash2, Database, Hexagon, Zap, Lock, ArrowUpCircle, Trophy } from 'lucide-react';
@@ -41,6 +41,10 @@ export const LabView: React.FC<LabViewProps> = ({
 
   const currentCapacity = ROSTER_BASE_CAPACITY + playerState.upgrades.rosterCapacityLevel;
   const isRosterFull = playerState.birds.length >= currentCapacity;
+
+  // Max Craft Rarity
+  const maxGearRarity = getMaxCraftRarity(playerState.upgrades.craftRarityLevel);
+  const maxGemRarity = getMaxCraftRarity(playerState.upgrades.gemRarityLevel);
 
   const triggerRevealAnimation = (finalRarity: Rarity) => {
       setIsRevealing(true);
@@ -196,9 +200,15 @@ export const LabView: React.FC<LabViewProps> = ({
           <div className="border-t border-slate-800 pt-4">
               {playerState.unlocks.workshop ? (
                   <>
-                    <h2 className="font-tech text-xl text-rose-400 mb-4 flex items-center gap-2">
-                        <Hammer size={20} /> WORKSHOP
-                    </h2>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="font-tech text-xl text-rose-400 flex items-center gap-2">
+                            <Hammer size={20} /> WORKSHOP
+                        </h2>
+                        <div className="text-right">
+                            <div className="text-[10px] text-slate-500 font-bold uppercase">Level {playerState.upgrades.craftRarityLevel}</div>
+                            <div className={`text-xs font-bold ${RARITY_CONFIG[maxGearRarity].color}`}>Max: {RARITY_CONFIG[maxGearRarity].name}</div>
+                        </div>
+                    </div>
                     <Card className="border-l-4 border-l-rose-500">
                         <div className="grid grid-cols-2 gap-4">
                             {/* Beak Crafting - Available immediately with Workshop */}
@@ -270,9 +280,15 @@ export const LabView: React.FC<LabViewProps> = ({
           <div className="border-t border-slate-800 pt-4">
               {playerState.unlocks.gemCrafting ? (
                   <>
-                    <h2 className="font-tech text-xl text-purple-400 mb-4 flex items-center gap-2">
-                        <Hexagon size={20} /> GEMFORGE
-                    </h2>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="font-tech text-xl text-purple-400 flex items-center gap-2">
+                            <Hexagon size={20} /> GEMFORGE
+                        </h2>
+                        <div className="text-right">
+                            <div className="text-[10px] text-slate-500 font-bold uppercase">Level {playerState.upgrades.gemRarityLevel}</div>
+                            <div className={`text-xs font-bold ${RARITY_CONFIG[maxGemRarity].color}`}>Max: {RARITY_CONFIG[maxGemRarity].name}</div>
+                        </div>
+                    </div>
                     <Card className="border-l-4 border-l-purple-500">
                         <div className="grid grid-cols-1 gap-4">
                             <button 

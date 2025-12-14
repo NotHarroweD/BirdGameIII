@@ -37,8 +37,11 @@ export const INITIAL_PLAYER_STATE: PlayerState = {
       totalCrafts: 0,
       totalCatches: 0,
       battlesWon: 0,
-      highestZoneReached: 1
+      highestZoneReached: 1,
+      maxPerfectCatchStreak: 0,
+      systemUnlocked: 0
   },
+  achievementBaselines: {},
   apShop: {
       featherBoost: 0,
       scrapBoost: 0,

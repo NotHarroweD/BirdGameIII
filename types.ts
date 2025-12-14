@@ -231,6 +231,8 @@ export interface LifetimeStats {
   totalCatches: number;
   battlesWon: number;
   highestZoneReached: number;
+  maxPerfectCatchStreak: number;
+  systemUnlocked: number; // 0 or 1
   [key: string]: number;
 }
 
@@ -265,6 +267,7 @@ export interface PlayerState {
   ap: number;
   completedAchievementIds: string[];
   lifetimeStats: LifetimeStats;
+  achievementBaselines: Partial<LifetimeStats>; // Snapshot of stats when achievements were unlocked
   apShop: APShopState;
   unlocks: UnlocksState;
 }
@@ -299,13 +302,18 @@ export interface RarityTier {
   dropRate: number;
 }
 
+export interface AchievementStage {
+  targetValue: number;
+  apReward: number;
+  descriptionOverride?: string;
+}
+
 export interface Achievement {
   id: string;
   name: string;
   description: string;
-  targetValue: number;
   statKey: string;
-  apReward: number;
+  stages: AchievementStage[];
 }
 
 export interface APShopItem {
@@ -339,7 +347,7 @@ export interface HubProps {
   onSocketGem: (gearId: string, gemId: string, socketIndex: number) => void;
   onUnsocketGem: (gearId: string, socketIndex: number) => void;
   onUseConsumable: (type: ConsumableType, rarity: Rarity) => void;
-  onClaimAchievement: (id: string) => void;
+  onClaimAchievement: (id: string, stageIndex: number) => void;
   onBuyAPUpgrade: (id: keyof APShopState) => void;
   onUnlockFeature: (feature: keyof UnlocksState) => void;
   currentZone: number;
