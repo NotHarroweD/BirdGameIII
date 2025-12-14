@@ -191,8 +191,8 @@ export default function App() {
                if (prev.huntingBirdIds.includes(bird.instanceId)) {
                    // Calculate Resource Yield (same as before but per bird)
                    const rarityMult = RARITY_CONFIG[bird.rarity].minMult;
-                   // Updated: Increased leveling passive benefit from 0.1 to 0.15
-                   let baseIncome = (bird.huntingConfig.baseRate * rarityMult) * (1 + (bird.level * 0.15));
+                   // Updated: Increased leveling passive benefit from 0.15 to 0.25 (User requested increase)
+                   let baseIncome = (bird.huntingConfig.baseRate * rarityMult) * (1 + (bird.level * 0.25));
                    
                    // Apply Hunting Speed Buff Multiplier directly to yield
                    baseIncome *= multiplier;
