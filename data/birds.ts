@@ -15,10 +15,10 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
     baseDefense: 35,
     baseSpeed: 95,
     baseStats: {
-      hp: [90, 110], // Buffed from [70, 90]
+      hp: [90, 110], 
       energy: [110, 130],
       attack: [45, 55],
-      defense: [35, 45], // Buffed from [25, 35]
+      defense: [35, 45], 
       speed: [95, 110]
     },
     passive: {
@@ -26,9 +26,9 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
       description: 'Regenerates Energy 50% faster.'
     },
     moves: [
-      { id: 'rapid_peck', name: 'Rapid Peck', description: 'Multi-hit strike.', type: MoveType.ATTACK, power: 20, cost: 10, accuracy: 95, cooldown: 2000, skillCheck: SkillCheckType.MASH }, // Power buffed 15 -> 20
-      { id: 'evasive_maneuvers', name: 'Evasive Maneuvers', description: 'Increases evasion.', type: MoveType.DEFENSE, power: 0, cost: 15, accuracy: 100, effect: 'dodge', cooldown: 6000 },
-      { id: 'nectar_sip', name: 'Nectar Sip', description: 'Restore HP.', type: MoveType.HEAL, power: 30, cost: 25, accuracy: 100, cooldown: 8000, skillCheck: SkillCheckType.TIMING }, // Cooldown reduced 12s -> 8s
+      { id: 'rapid_peck', name: 'Rapid Peck', description: 'Multi-hit strike.', type: MoveType.ATTACK, power: 20, cost: 10, accuracy: 95, cooldown: 2000, skillCheck: SkillCheckType.MASH },
+      { id: 'evasive_maneuvers', name: 'Evasive Maneuvers', description: 'Increases evasion.', type: MoveType.DEFENSE, power: 0, cost: 15, accuracy: 100, effect: 'dodge', cooldown: 6000, skillCheck: SkillCheckType.REFLEX },
+      { id: 'nectar_sip', name: 'Nectar Sip', description: 'Restore HP.', type: MoveType.HEAL, power: 20, cost: 25, accuracy: 100, cooldown: 8000, skillCheck: SkillCheckType.REFLEX }, 
       { id: 'sonic_boom', name: 'Sonic Boom', description: 'High altitude sonic wave.', type: MoveType.SPECIAL, power: 55, cost: 45, accuracy: 90, requiresHeight: true, cooldown: 15000, skillCheck: SkillCheckType.TIMING }
     ],
     huntingConfig: {
@@ -60,8 +60,8 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
     },
     moves: [
       { id: 'crushing_talon', name: 'Crushing Talon', description: 'Devastating strike.', type: MoveType.ATTACK, power: 45, cost: 20, accuracy: 85, cooldown: 4000, skillCheck: SkillCheckType.TIMING },
-      { id: 'iron_plumage', name: 'Iron Plumage', description: 'Reduce damage.', type: MoveType.DEFENSE, power: 0, cost: 20, accuracy: 100, cooldown: 8000 },
-      { id: 'scavenge', name: 'Scavenge', description: 'Heal from surroundings.', type: MoveType.HEAL, power: 45, cost: 35, accuracy: 100, cooldown: 15000 },
+      { id: 'iron_plumage', name: 'Iron Plumage', description: 'Reduce damage.', type: MoveType.DEFENSE, power: 0, cost: 20, accuracy: 100, cooldown: 8000, skillCheck: SkillCheckType.REFLEX },
+      { id: 'scavenge', name: 'Scavenge', description: 'Heal from surroundings.', type: MoveType.HEAL, power: 30, cost: 35, accuracy: 100, cooldown: 15000, skillCheck: SkillCheckType.REFLEX },
       { id: 'sky_drop', name: 'Sky Drop', description: 'Lift and drop enemy.', type: MoveType.SPECIAL, power: 75, cost: 55, accuracy: 80, requiresHeight: true, cooldown: 18000, skillCheck: SkillCheckType.MASH }
     ],
     huntingConfig: {
@@ -93,8 +93,8 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
     },
     moves: [
       { id: 'precision_dive', name: 'Precision Dive', description: 'Guaranteed hit.', type: MoveType.ATTACK, power: 25, cost: 15, accuracy: 100, requiresHeight: true, cooldown: 3000, skillCheck: SkillCheckType.TIMING },
-      { id: 'wind_ride', name: 'Wind Ride', description: 'Ride the wind.', type: MoveType.DEFENSE, power: 0, cost: 10, accuracy: 100, effect: 'dodge', cooldown: 5000 },
-      { id: 'roost', name: 'Roost', description: 'Rest to heal.', type: MoveType.HEAL, power: 35, cost: 25, accuracy: 100, cooldown: 12000 },
+      { id: 'wind_ride', name: 'Wind Ride', description: 'Ride the wind.', type: MoveType.DEFENSE, power: 0, cost: 10, accuracy: 100, effect: 'dodge', cooldown: 5000, skillCheck: SkillCheckType.REFLEX },
+      { id: 'roost', name: 'Roost', description: 'Rest to heal.', type: MoveType.HEAL, power: 25, cost: 25, accuracy: 100, cooldown: 12000, skillCheck: SkillCheckType.REFLEX },
       { id: 'razor_wind', name: 'Razor Wind', description: 'Wind cutter.', type: MoveType.SPECIAL, power: 50, cost: 40, accuracy: 95, cooldown: 10000, skillCheck: SkillCheckType.MASH }
     ],
     huntingConfig: {
@@ -126,8 +126,8 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
     },
     moves: [
       { id: 'silent_swoop', name: 'Silent Swoop', description: 'Stealth attack.', type: MoveType.ATTACK, power: 30, cost: 15, accuracy: 100, cooldown: 3500, skillCheck: SkillCheckType.TIMING },
-      { id: 'feint', name: 'Feint', description: 'Confuse enemy.', type: MoveType.DEFENSE, power: 0, cost: 10, accuracy: 100, effect: 'dodge', cooldown: 6000 },
-      { id: 'meditate', name: 'Meditate', description: 'Focus energy to heal.', type: MoveType.HEAL, power: 40, cost: 30, accuracy: 100, cooldown: 14000 },
+      { id: 'feint', name: 'Feint', description: 'Confuse enemy.', type: MoveType.DEFENSE, power: 0, cost: 10, accuracy: 100, effect: 'dodge', cooldown: 6000, skillCheck: SkillCheckType.REFLEX },
+      { id: 'meditate', name: 'Meditate', description: 'Focus energy to heal.', type: MoveType.HEAL, power: 25, cost: 30, accuracy: 100, cooldown: 14000, skillCheck: SkillCheckType.REFLEX },
       { id: 'moon_beam', name: 'Moon Beam', description: 'Concentrated lunar energy.', type: MoveType.SPECIAL, power: 65, cost: 50, accuracy: 90, cooldown: 16000, skillCheck: SkillCheckType.MASH }
     ],
     huntingConfig: {
@@ -159,7 +159,7 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
     },
     moves: [
       { id: 'acid_puke', name: 'Acid Bile', description: 'Corrosive attack.', type: MoveType.ATTACK, power: 25, cost: 15, accuracy: 90, cooldown: 4000, skillCheck: SkillCheckType.MASH },
-      { id: 'harden', name: 'Harden', description: 'Toughen skin.', type: MoveType.DEFENSE, power: 0, cost: 15, accuracy: 100, cooldown: 8000 },
+      { id: 'harden', name: 'Harden', description: 'Toughen skin.', type: MoveType.DEFENSE, power: 0, cost: 15, accuracy: 100, cooldown: 8000, skillCheck: SkillCheckType.REFLEX },
       { id: 'carrion_feast', name: 'Carrion Feast', description: 'Drain life from enemy.', type: MoveType.DRAIN, power: 40, cost: 35, accuracy: 95, cooldown: 10000, skillCheck: SkillCheckType.DRAIN_GAME },
       { id: 'bone_drop', name: 'Bone Drop', description: 'Drop from height.', type: MoveType.SPECIAL, power: 60, cost: 45, accuracy: 85, requiresHeight: true, cooldown: 17000 }
     ],

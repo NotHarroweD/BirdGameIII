@@ -38,7 +38,8 @@ export enum SkillCheckType {
   TIMING = 'TIMING',
   MASH = 'MASH',
   COMBO = 'COMBO',
-  DRAIN_GAME = 'DRAIN_GAME'
+  DRAIN_GAME = 'DRAIN_GAME',
+  REFLEX = 'REFLEX'
 }
 
 export enum GearType {
@@ -278,6 +279,11 @@ export interface BattleLog {
   type: 'info' | 'damage' | 'heal' | 'buff';
 }
 
+export interface ZoneClearReward {
+  feathers: number;
+  scrap: number;
+}
+
 export interface BattleResult {
   winner: 'player' | 'opponent';
   opponentRarity: Rarity;
@@ -289,6 +295,7 @@ export interface BattleResult {
     gem?: Gem;
     consumable?: Consumable;
   };
+  zoneClearReward?: ZoneClearReward;
 }
 
 export interface RarityTier {

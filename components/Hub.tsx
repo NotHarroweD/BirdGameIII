@@ -8,7 +8,7 @@ import { MapView } from './MapView';
 import { InventoryView } from './InventoryView';
 import { UpgradesView } from './UpgradesView';
 import { AchievementsView } from './AchievementsView';
-import { Database, Activity, Hammer, Gem, Clock, Award } from 'lucide-react';
+import { Database, Hammer, Gem, Clock, Award } from 'lucide-react';
 import { RARITY_CONFIG } from '../constants';
 
 export const Hub: React.FC<HubProps> = ({ 
@@ -67,11 +67,11 @@ export const Hub: React.FC<HubProps> = ({
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans">
       
-      {/* Top Bar - Updated Layout to prevent wrapping */}
-      <div className="fixed top-0 left-0 right-0 h-16 bg-slate-900/95 backdrop-blur border-b border-slate-800 z-40 flex items-center px-4 md:px-6 shadow-lg gap-4 overflow-hidden">
+      {/* Top Bar - Updated Layout */}
+      <div className="fixed top-0 left-0 right-0 h-16 bg-slate-900/95 backdrop-blur border-b border-slate-800 z-40 flex items-center px-4 md:px-6 shadow-lg gap-4">
           
-          {/* Resources Container - Flexible and Scrollable */}
-          <div className="flex items-center gap-4 overflow-x-auto no-scrollbar mask-linear-fade flex-1 min-w-0 pr-4">
+          {/* Resources Container - Now takes available space */}
+          <div className="flex items-center gap-4 flex-1 min-w-0">
               <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
                   <Database className="text-cyan-400" size={16} />
                   <div className="flex flex-col">
@@ -95,24 +95,24 @@ export const Hub: React.FC<HubProps> = ({
               </div>
           </div>
           
-          {/* Stats & Zone - Fixed on Right, Shrinks if absolutely necessary */}
-          <div className="flex items-center gap-3 shrink-0 bg-slate-900/50 pl-2">
+          {/* Stats & Buffs - Fixed on Right */}
+          <div className="flex items-center gap-4 shrink-0">
               <div className="text-right hidden lg:block">
                   <div className="text-xs text-slate-500">GATHERING RATE</div>
                   <div className="font-mono text-emerald-400">+{passiveRate.toFixed(1)}/s</div>
               </div>
               
               {/* Buff Indicators */}
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                   {playerState.activeBuffs.map((buff, i) => {
-                      const rarityColor = RARITY_CONFIG[buff.rarity].color;
+                      const config = RARITY_CONFIG[buff.rarity];
                       return (
-                          <div key={i} className={`bg-slate-800 p-1.5 rounded border border-slate-700 relative group`}>
-                              {buff.type === ConsumableType.HUNTING_SPEED && <Clock size={14} className={rarityColor} />}
-                              {buff.type === ConsumableType.BATTLE_REWARD && <Award size={14} className={rarityColor} />}
+                          <div key={i} className={`p-1.5 rounded border ${config.borderColor} bg-slate-900 relative group shadow-md`}>
+                              {buff.type === ConsumableType.HUNTING_SPEED && <Clock size={18} className={config.color} />}
+                              {buff.type === ConsumableType.BATTLE_REWARD && <Award size={18} className={config.color} />}
                               
                               <div className="absolute top-full right-0 mt-1 bg-slate-900 border border-slate-700 p-2 rounded shadow-xl z-50 hidden group-hover:block whitespace-nowrap">
-                                  <div className={`text-xs font-bold ${rarityColor}`}>{buff.type === ConsumableType.HUNTING_SPEED ? "Speed Boost" : "Reward Bonus"}</div>
+                                  <div className={`text-xs font-bold ${config.color}`}>{buff.type === ConsumableType.HUNTING_SPEED ? "Speed Boost" : "Reward Bonus"}</div>
                                   <div className="text-[10px] text-slate-400">
                                       {buff.type === ConsumableType.HUNTING_SPEED ? `${buff.remaining}s remaining` : `${buff.remaining} battles left`}
                                   </div>
@@ -120,12 +120,6 @@ export const Hub: React.FC<HubProps> = ({
                           </div>
                       );
                   })}
-              </div>
-
-              <div className="w-px h-8 bg-slate-800 hidden md:block" />
-              <div className="bg-slate-800 px-3 py-1 rounded-full border border-slate-700 flex items-center gap-2">
-                  <Activity size={14} className="text-emerald-500" />
-                  <span className="font-tech text-sm whitespace-nowrap">ZONE {playerState.highestZone}</span>
               </div>
           </div>
       </div>

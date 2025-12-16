@@ -4,7 +4,7 @@ import { BirdInstance, Rarity, Gem, Consumable, EnemyPrefix } from '../types';
 import { RARITY_CONFIG, XP_TABLE } from '../constants';
 import { Button } from './Button';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Hexagon, Briefcase, Gem as GemIcon, Star, Skull, Check } from 'lucide-react';
+import { Zap, Hexagon, Briefcase, Gem as GemIcon, Star, Skull, Check, Award, Hammer, Map, RotateCcw } from 'lucide-react';
 
 const LootItem: React.FC<{ 
     icon: React.ReactNode, 
@@ -206,16 +206,6 @@ export const BattleResultOverlay: React.FC<{
             cancelAnimationFrame(animationFrameId);
         };
     }, [isVictory]);
-
-    // Auto-advance logic for Zone Clear
-    useEffect(() => {
-        if (showButtons && isZoneCleared) {
-            const timer = setTimeout(() => {
-                onContinue(false); // Go to Hub/Modal
-            }, 1500);
-            return () => clearTimeout(timer);
-        }
-    }, [showButtons, isZoneCleared, onContinue]);
 
     const isSpecialXp = enemyPrefix === EnemyPrefix.GENIUS;
     const isSpecialFeathers = enemyPrefix === EnemyPrefix.MERCHANT;
@@ -451,7 +441,7 @@ export const BattleResultOverlay: React.FC<{
                                         <Zap size={16} className="mr-2" /> BATTLE AGAIN
                                     </Button>
                                     <Button fullWidth variant="secondary" onClick={() => onContinue(false)}>
-                                        RETURN TO HUB
+                                        <Map size={16} className="mr-2" /> RETURN TO HUB
                                     </Button>
                                 </motion.div>
                             )}
