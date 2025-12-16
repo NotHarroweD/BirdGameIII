@@ -56,7 +56,8 @@ export const RosterView: React.FC<RosterViewProps> = ({
   // Hunting Rate Calculation with Gear Boosts
   const calculateHuntingRate = (bird: BirdInstance) => {
       if (!bird) return 0;
-      let baseRate = (bird.huntingConfig.baseRate * RARITY_CONFIG[bird.rarity].minMult * (1 + bird.level * 0.1));
+      // Updated to 0.5 (50%) per level to match GameLogic
+      let baseRate = (bird.huntingConfig.baseRate * RARITY_CONFIG[bird.rarity].minMult * (1 + bird.level * 0.5));
       
       let bonusPct = 0;
       const addGemBuffs = (g: Gear | null) => {
@@ -472,90 +473,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
         <div className="p-8 text-center text-slate-500 italic">No bird selected.</div>
       )}
 
-      {/* 3. Bird List (Moved Below) */}
-      <div className="space-y-3">
-          <div className="flex justify-between items-center px-1">
-              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Roster ({playerState.birds.length}/{currentCapacity})
-              </div>
-          </div>
-          
-          <div className="flex flex-col gap-2">
-              {playerState.birds.map(bird => {
-                  const isSelected = bird.instanceId === playerState.selectedBirdId;
-                  const isBirdHunting = playerState.huntingBirdIds.includes(bird.instanceId);
-                  const config = RARITY_CONFIG[bird.rarity];
-                  
-                  return (
-                      <button
-                          key={bird.instanceId}
-                          onClick={() => onSelectBird(bird.instanceId)}
-                          className={`
-                              relative w-full p-2 rounded-lg border-2 text-left transition-all overflow-hidden
-                              ${isSelected 
-                                  ? `bg-slate-800 ${config.borderColor} shadow-[0_0_15px_rgba(0,0,0,0.3)] scale-[1.01]` 
-                                  : `bg-slate-900 border-slate-800 hover:bg-slate-800 hover:border-slate-700`
-                              }
-                          `}
-                      >
-                          {isSelected && <div className={`absolute inset-0 bg-gradient-to-r ${config.glowColor.replace('shadow-', 'from-')}/5 to-transparent pointer-events-none`} />}
-
-                          <div className="flex items-center gap-4 relative z-10">
-                              {/* Avatar */}
-                              <div className={`w-14 h-14 rounded border bg-slate-950 shrink-0 overflow-hidden shadow-inner ${config.borderColor}`}>
-                                  <img 
-                                      src={bird.imageUrl} 
-                                      className="w-full h-full object-cover" 
-                                      referrerPolicy="no-referrer"
-                                      onError={(e) => {
-                                          const target = e.currentTarget;
-                                          if (!target.src.includes('placehold.co')) {
-                                              target.src = 'https://placehold.co/100x100/1e293b/475569?text=' + bird.name;
-                                          }
-                                      }}
-                                  />
-                              </div>
-
-                              {/* Info */}
-                              <div className="flex-1 min-w-0">
-                                  <div className="flex justify-between items-start mb-1">
-                                      <div>
-                                          <div className={`font-tech font-bold text-lg leading-none ${config.color} truncate pr-2`}>
-                                              {bird.name}
-                                          </div>
-                                          <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
-                                              {bird.species} <span className="text-slate-600 mx-1">|</span> LVL {bird.level}
-                                          </div>
-                                      </div>
-                                      
-                                      {/* Status Badges */}
-                                      {isBirdHunting && (
-                                          <div className="flex items-center gap-1 text-[9px] font-bold text-amber-400 bg-amber-900/20 px-1.5 py-0.5 rounded border border-amber-500/30 animate-pulse shrink-0">
-                                              <Target size={10} /> HUNT
-                                          </div>
-                                      )}
-                                  </div>
-                                  
-                                  {/* Equipment Icons */}
-                                  <div className="flex items-center gap-2">
-                                      {renderGearIconMini(bird.gear.beak, 'beak')}
-                                      {renderGearIconMini(bird.gear.claws, 'claws')}
-                                  </div>
-                              </div>
-                          </div>
-                      </button>
-                  );
-              })}
-          </div>
-          
-          {/* Empty Slots Indicator */}
-          {playerState.birds.length < currentCapacity && (
-              <div className="text-center text-[10px] text-slate-600 border border-dashed border-slate-800 rounded-lg p-2 bg-slate-950/30">
-                  {currentCapacity - playerState.birds.length} Open Slots Available
-              </div>
-          )}
-      </div>
-
       {/* --- MODALS --- */}
       <AnimatePresence>
           {/* Equip Modal */}
@@ -720,7 +637,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
                            <Button fullWidth variant="danger" onClick={() => handleGearAction('salvage')} className="border-rose-800">
                                 <div className="flex flex-col items-center leading-none py-1">
                                     <span>SALVAGE</span>
-                                    <span className="text-[8px] opacity-70 mt-1">+{getSalvageValues(viewingGear).scrap} SCRAP</span>
+                                    <span className="text-[8px] opacity-70 mt-1">+{getSalvageValues(viewingGear).feathers} F / +{getSalvageValues(viewingGear).scrap} S</span>
                                 </div>
                            </Button>
                       </div>

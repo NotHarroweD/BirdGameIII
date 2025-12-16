@@ -4,11 +4,11 @@ import { Hub } from './Hub';
 import { BattleArena } from './BattleArena';
 import { CatchScreen } from './CatchScreen';
 import { BirdSelection } from './BirdSelection';
-import { GameScreen, HubTab, UpgradeState, Bird, UnlocksState, ZoneClearReward } from '../types';
-import { INITIAL_PLAYER_STATE, UPGRADE_COSTS } from '../constants';
+import { GameScreen, HubTab, UpgradeState, Bird, UnlocksState, ZoneClearReward, ConsumableType } from '../types';
+import { INITIAL_PLAYER_STATE, UPGRADE_COSTS, RARITY_CONFIG, CONSUMABLE_STATS } from '../constants';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './Button';
-import { Lock, Unlock, Database, Hammer, ArrowRight, Beaker, Trash2, AlertTriangle, Swords } from 'lucide-react';
+import { Lock, Unlock, Database, Hammer, ArrowRight, Beaker, Trash2, AlertTriangle, Swords, Wind, Clock, Award } from 'lucide-react';
 import { useGameLogic } from '../hooks/useGameLogic';
 
 export default function App() {
@@ -57,7 +57,7 @@ export default function App() {
       const outcome = actions.handleBattleComplete(result, selectedZone);
       
       if (outcome.pendingZoneUnlock) {
-          // If we are advancing zone logic, we update selection
+          // If we are advancing zone logic via legacy path (backup), we update selection
           setSelectedZone(outcome.pendingZoneUnlock);
       }
       
@@ -72,6 +72,7 @@ export default function App() {
 
   const handleZoneCleared = (reward: ZoneClearReward) => {
       setZoneReward(reward);
+      actions.handleZoneSuccess(reward, selectedZone);
       setUnlockModalZone(selectedZone + 1);
   };
 
@@ -97,6 +98,10 @@ export default function App() {
               setInitialHubTab(targetTab);
               setScreen(GameScreen.HUB);
           }
+          // Auto-advance selection when moving to next zone via unlock
+          if (unlockModalZone > selectedZone) {
+              setSelectedZone(unlockModalZone);
+          }
           setUnlockModalZone(null);
           setZoneReward(null);
       }
@@ -115,6 +120,14 @@ export default function App() {
           setInitialHubTab(HubTab.LAB);
           setScreen(GameScreen.HUB);
       }
+  };
+
+  const handleCloseUnlockModal = () => {
+      if (unlockModalZone && unlockModalZone > selectedZone) {
+          setSelectedZone(unlockModalZone);
+      }
+      setUnlockModalZone(null);
+      setZoneReward(null);
   };
 
   const getUnlockDetails = (zone: number) => {
@@ -345,16 +358,31 @@ export default function App() {
                       </h2>
                       
                       {zoneReward && (
-                          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 w-full mb-4 flex justify-around">
-                              <div className="flex flex-col items-center">
-                                  <div className="text-2xl font-mono text-cyan-400 font-bold">+{zoneReward.feathers}</div>
-                                  <div className="text-[9px] text-slate-500 uppercase font-bold">Feathers</div>
+                          <>
+                              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 w-full mb-4 flex justify-around">
+                                  <div className="flex flex-col items-center">
+                                      <div className="text-2xl font-mono text-cyan-400 font-bold">+{zoneReward.feathers}</div>
+                                      <div className="text-[9px] text-slate-500 uppercase font-bold">Feathers</div>
+                                  </div>
+                                  <div className="flex flex-col items-center">
+                                      <div className="text-2xl font-mono text-slate-300 font-bold">+{zoneReward.scrap}</div>
+                                      <div className="text-[9px] text-slate-500 uppercase font-bold">Scrap</div>
+                                  </div>
                               </div>
-                              <div className="flex flex-col items-center">
-                                  <div className="text-2xl font-mono text-slate-300 font-bold">+{zoneReward.scrap}</div>
-                                  <div className="text-[9px] text-slate-500 uppercase font-bold">Scrap</div>
-                              </div>
-                          </div>
+                              
+                              {zoneReward.consumable && (
+                                  <div className={`w-full p-3 rounded-lg border-2 flex items-center gap-4 bg-slate-950/50 ${RARITY_CONFIG[zoneReward.consumable.rarity].borderColor} relative overflow-hidden mb-4 shadow-lg group`}>
+                                      <div className={`absolute inset-0 bg-gradient-to-r ${RARITY_CONFIG[zoneReward.consumable.rarity].glowColor.replace('shadow-', 'from-')}/10 to-transparent pointer-events-none`} />
+                                      <div className="relative z-10 flex items-center justify-center w-10 h-10 bg-slate-900 rounded-full border border-white/10 shadow-inner">
+                                           {zoneReward.consumable.type === ConsumableType.HUNTING_SPEED ? <Clock className={RARITY_CONFIG[zoneReward.consumable.rarity].color} size={20} /> : <Award className={RARITY_CONFIG[zoneReward.consumable.rarity].color} size={20} />}
+                                      </div>
+                                      <div className="relative z-10 flex-1 min-w-0">
+                                          <div className={`font-bold font-tech text-sm truncate ${RARITY_CONFIG[zoneReward.consumable.rarity].color}`}>{CONSUMABLE_STATS[zoneReward.consumable.type].name}</div>
+                                          <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Zone Reward</div>
+                                      </div>
+                                  </div>
+                              )}
+                          </>
                       )}
 
                       {unlockInfo && (
@@ -397,10 +425,7 @@ export default function App() {
                               size="md" 
                               variant="ghost" 
                               fullWidth 
-                              onClick={() => {
-                                  setUnlockModalZone(null);
-                                  setZoneReward(null);
-                              }}
+                              onClick={handleCloseUnlockModal}
                           >
                               CLOSE
                           </Button>

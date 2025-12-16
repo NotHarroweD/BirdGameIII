@@ -27,7 +27,7 @@ export const LabView: React.FC<LabViewProps> = ({
     onKeepGear, 
     onSalvageGear, 
     onKeepGem, 
-    onSalvageGem,
+    onSalvageGem, 
     onUnlockFeature
 }) => {
   const canCraft = playerState.feathers >= UPGRADE_COSTS.CRAFT_GEAR && playerState.scrap >= UPGRADE_COSTS.CRAFT_SCRAP;
@@ -53,7 +53,6 @@ export const LabView: React.FC<LabViewProps> = ({
       const finalIndex = RARITY_ORDER.indexOf(finalRarity);
       let count = 0;
       // Dramatic effect: Higher rarity = longer spin
-      // Common: 15 steps. Mythic: 40 steps.
       const totalSteps = 15 + (finalIndex * 6); 
       let delay = 30; // Start super fast
 
@@ -217,65 +216,60 @@ export const LabView: React.FC<LabViewProps> = ({
                                 disabled={!canCraft}
                                 className="bg-slate-950 p-4 rounded border border-slate-800 hover:border-cyan-500 transition-all flex flex-col items-center gap-2 group disabled:opacity-50"
                             >
-                                <div className="w-10 h-10 rounded-full bg-slate-800 group-hover:bg-cyan-900/30 flex items-center justify-center text-cyan-400 transition-colors">
-                                    <Swords size={20} />
+                                <div className="w-10 h-10 rounded-full bg-slate-800 group-hover:bg-cyan-900/30 flex items-center justify-center transition-colors">
+                                    <Swords size={20} className="text-cyan-400" />
                                 </div>
-                                <div className="font-tech font-bold">CRAFT BEAK</div>
-                                <div className="text-xs text-slate-500 flex flex-col items-center gap-1">
-                                    <span className="flex items-center gap-1"><Database size={12}/> {UPGRADE_COSTS.CRAFT_GEAR}</span>
-                                    <span className="flex items-center gap-1 text-slate-400"><Hammer size={12}/> {UPGRADE_COSTS.CRAFT_SCRAP}</span>
+                                <div className="text-xs font-bold text-white">CRAFT BEAK</div>
+                                <div className="text-[10px] text-slate-500 flex gap-2">
+                                    <span className={playerState.feathers >= UPGRADE_COSTS.CRAFT_GEAR ? "text-slate-400" : "text-rose-500"}>{UPGRADE_COSTS.CRAFT_GEAR} F</span>
+                                    <span className={playerState.scrap >= UPGRADE_COSTS.CRAFT_SCRAP ? "text-slate-400" : "text-rose-500"}>{UPGRADE_COSTS.CRAFT_SCRAP} S</span>
                                 </div>
                             </button>
 
-                            {/* Claws Crafting - Locked until Zone 3 + Unlock Purchase */}
-                            {(!playerState.unlocks.clawCrafting) ? (
-                                playerState.highestZone >= 3 ? (
-                                    <button 
-                                        className="bg-slate-950 p-4 rounded border border-slate-800 flex flex-col items-center gap-2 hover:bg-slate-900 group"
-                                        onClick={() => onUnlockFeature('clawCrafting')}
-                                        disabled={playerState.feathers < 100 || playerState.scrap < 25}
-                                    >
-                                        <Lock size={20} className="text-slate-500 group-hover:text-rose-400" />
-                                        <div className="font-tech font-bold text-slate-400 text-sm group-hover:text-white">UNLOCK CLAWS</div>
-                                        <div className="flex items-center gap-2 text-[10px] text-slate-500 group-hover:text-rose-400">
-                                            <span className="flex items-center gap-1"><Database size={10}/> 100</span>
-                                            <span className="flex items-center gap-1"><Hammer size={10}/> 25</span>
-                                        </div>
-                                    </button>
-                                ) : (
-                                    // Placeholder for when Workshop is unlocked but Zone 3 not reached
-                                    <div className="bg-slate-950 p-4 rounded border border-slate-800 flex flex-col items-center gap-2 opacity-50">
-                                        <Lock size={20} className="text-slate-600" />
-                                        <div className="font-tech font-bold text-slate-600 text-sm">UNKNOWN</div>
-                                        <div className="text-[10px] text-slate-700">REQ: ZONE 3</div>
-                                    </div>
-                                )
-                            ) : (
+                            {/* Claw Crafting - Requires Unlock */}
+                            {playerState.unlocks.clawCrafting ? (
                                 <button 
                                     onClick={() => handleCraftClick(GearType.CLAWS)}
                                     disabled={!canCraft}
-                                    className="bg-slate-950 p-4 rounded border border-slate-800 hover:border-rose-500 transition-all flex flex-col items-center gap-2 group disabled:opacity-50"
+                                    className="bg-slate-950 p-4 rounded border border-slate-800 hover:border-cyan-500 transition-all flex flex-col items-center gap-2 group disabled:opacity-50"
                                 >
-                                    <div className="w-10 h-10 rounded-full bg-slate-800 group-hover:bg-rose-900/30 flex items-center justify-center text-rose-400 transition-colors">
-                                        <Wind size={20} />
+                                    <div className="w-10 h-10 rounded-full bg-slate-800 group-hover:bg-cyan-900/30 flex items-center justify-center transition-colors">
+                                        <Wind size={20} className="text-cyan-400" />
                                     </div>
-                                    <div className="font-tech font-bold">CRAFT CLAWS</div>
-                                    <div className="text-xs text-slate-500 flex flex-col items-center gap-1">
-                                        <span className="flex items-center gap-1"><Database size={12}/> {UPGRADE_COSTS.CRAFT_GEAR}</span>
-                                        <span className="flex items-center gap-1 text-slate-400"><Hammer size={12}/> {UPGRADE_COSTS.CRAFT_SCRAP}</span>
+                                    <div className="text-xs font-bold text-white">CRAFT CLAWS</div>
+                                    <div className="text-[10px] text-slate-500 flex gap-2">
+                                        <span className={playerState.feathers >= UPGRADE_COSTS.CRAFT_GEAR ? "text-slate-400" : "text-rose-500"}>{UPGRADE_COSTS.CRAFT_GEAR} F</span>
+                                        <span className={playerState.scrap >= UPGRADE_COSTS.CRAFT_SCRAP ? "text-slate-400" : "text-rose-500"}>{UPGRADE_COSTS.CRAFT_SCRAP} S</span>
                                     </div>
+                                </button>
+                            ) : (
+                                <button 
+                                    onClick={() => onUnlockFeature('clawCrafting')}
+                                    disabled={playerState.feathers < 100 || playerState.scrap < 25}
+                                    className="bg-slate-900/50 p-4 rounded border border-dashed border-slate-800 hover:border-slate-600 transition-all flex flex-col items-center gap-2 group opacity-70"
+                                >
+                                    <Lock size={20} className="text-slate-600" />
+                                    <div className="text-xs font-bold text-slate-500">UNLOCK CLAWS</div>
+                                    <div className="text-[10px] text-slate-600">100 F / 25 S</div>
                                 </button>
                             )}
                         </div>
                     </Card>
                   </>
               ) : (
-                  renderUnlockCard("GEAR WORKSHOP", "Craft Beak equipment to boost your birds.", <Hammer size={32}/>, 50, 10, () => onUnlockFeature('workshop'))
+                  renderUnlockCard(
+                      'GEAR WORKSHOP', 
+                      'Enables crafting of Beak weaponry.', 
+                      <Hammer size={32} />, 
+                      50, 
+                      10, 
+                      () => onUnlockFeature('workshop')
+                  )
               )}
           </div>
       )}
 
-      {/* Gemforge - Requires Zone 4 */}
+      {/* Gemforge - Gems */}
       {(playerState.highestZone >= 4 || playerState.unlocks.gemCrafting) && (
           <div className="border-t border-slate-800 pt-4">
               {playerState.unlocks.gemCrafting ? (
@@ -290,42 +284,47 @@ export const LabView: React.FC<LabViewProps> = ({
                         </div>
                     </div>
                     <Card className="border-l-4 border-l-purple-500">
-                        <div className="grid grid-cols-1 gap-4">
-                            <button 
-                                onClick={handleCraftGemClick}
-                                disabled={!canCraftGem}
-                                className="bg-slate-950 p-4 rounded border border-slate-800 hover:border-purple-500 transition-all flex items-center justify-between group disabled:opacity-50"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-full bg-slate-800 group-hover:bg-purple-900/30 flex items-center justify-center text-purple-400 transition-colors border border-purple-500/30">
-                                        <Zap size={24} />
-                                    </div>
-                                    <div className="text-left">
-                                        <div className="font-tech font-bold text-lg text-white group-hover:text-purple-300">SYNTHESIZE GEM</div>
-                                        <div className="text-xs text-slate-500">Create power crystals for gear sockets</div>
-                                    </div>
+                        <button 
+                            onClick={handleCraftGemClick}
+                            disabled={!canCraftGem}
+                            className="w-full bg-slate-950 p-4 rounded border border-slate-800 hover:border-purple-500 transition-all flex items-center justify-between group disabled:opacity-50"
+                        >
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-full bg-slate-800 group-hover:bg-purple-900/30 flex items-center justify-center transition-colors">
+                                    <Zap size={24} className="text-purple-400" />
                                 </div>
-                                <div className="text-xs text-right text-slate-400">
-                                    <div className="flex items-center gap-1 justify-end"><Database size={12}/> {UPGRADE_COSTS.CRAFT_GEM}</div>
-                                    <div className="flex items-center gap-1 justify-end text-slate-500"><Hammer size={12}/> {UPGRADE_COSTS.CRAFT_GEM_SCRAP}</div>
+                                <div className="text-left">
+                                    <div className="text-sm font-bold text-white">SYNTHESIZE GEM</div>
+                                    <div className="text-[10px] text-slate-400">Creates a random socketable gem.</div>
                                 </div>
-                            </button>
-                        </div>
+                            </div>
+                            <div className="text-xs text-right font-mono">
+                                <div className={playerState.feathers >= UPGRADE_COSTS.CRAFT_GEM ? "text-slate-300" : "text-rose-500"}>{UPGRADE_COSTS.CRAFT_GEM} F</div>
+                                <div className={playerState.scrap >= UPGRADE_COSTS.CRAFT_GEM_SCRAP ? "text-slate-300" : "text-rose-500"}>{UPGRADE_COSTS.CRAFT_GEM_SCRAP} S</div>
+                            </div>
+                        </button>
                     </Card>
                   </>
               ) : (
-                  renderUnlockCard("GEM SYNTHESIS", "Unlock the Gemforge to synthesize powerful socketable gems.", <Hexagon size={32}/>, 500, 100, () => onUnlockFeature('gemCrafting'))
+                  renderUnlockCard(
+                      'GEMFORGE', 
+                      'Enables synthesis of powerful socketable gems.', 
+                      <Hexagon size={32} />, 
+                      500, 
+                      100, 
+                      () => onUnlockFeature('gemCrafting')
+                  )
               )}
           </div>
       )}
 
-      {/* Upgrades Access - Requires Zone 5 */}
-      {!playerState.unlocks.upgrades && playerState.highestZone >= 5 && (
+      {/* Upgrades - Moved to separate tab, but link here if locked */}
+      {playerState.highestZone >= 5 && !playerState.unlocks.upgrades && (
           <div className="border-t border-slate-800 pt-4">
               {renderUnlockCard(
-                  "CYBERNETICS LAB", 
-                  "Access system-wide efficiency upgrades (Unlocks Upgrade Tab).", 
-                  <ArrowUpCircle size={32}/>, 
+                  'CYBERNETICS LAB', 
+                  'Unlock advanced system upgrades.', 
+                  <ArrowUpCircle size={32} />, 
                   1000, 
                   200, 
                   () => onUnlockFeature('upgrades')
@@ -333,13 +332,13 @@ export const LabView: React.FC<LabViewProps> = ({
           </div>
       )}
 
-      {/* Achievements Access - Requires Zone 6 */}
-      {!playerState.unlocks.achievements && playerState.highestZone >= 6 && (
+      {/* Achievements - Link here if locked */}
+      {playerState.highestZone >= 6 && !playerState.unlocks.achievements && (
           <div className="border-t border-slate-800 pt-4">
               {renderUnlockCard(
-                  "HALL OF GLORY", 
-                  "Track milestones and earn AP (Unlocks Glory Tab).", 
-                  <Trophy size={32}/>, 
+                  'HALL OF GLORY', 
+                  'Track milestones and earn AP.', 
+                  <Trophy size={32} />, 
                   0, 
                   0, 
                   () => onUnlockFeature('achievements')
@@ -347,121 +346,129 @@ export const LabView: React.FC<LabViewProps> = ({
           </div>
       )}
 
-      {/* Crafting Result Modal */}
+      {/* CRAFTING RESULT MODAL */}
       <AnimatePresence>
           {craftedPreview && (
               <motion.div 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-6"
               >
                   <motion.div 
-                    initial={{ scale: 0.8, y: 20 }} animate={{ scale: 1, y: 0 }}
-                    className="bg-slate-900 border border-slate-700 p-6 rounded-2xl max-w-sm w-full relative flex flex-col items-center shadow-2xl max-h-[80vh] overflow-y-auto"
+                    initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+                    className={`bg-slate-900 border-2 p-6 rounded-xl w-full max-w-sm relative flex flex-col items-center shadow-2xl ${RARITY_CONFIG[displayRarity].borderColor}`}
                   >
-                      <h3 className="text-2xl font-tech text-white mb-2 text-center">
-                          {isRevealing ? (
-                              <span className="animate-pulse text-cyan-400 tracking-widest">SYNTHESIZING...</span>
-                          ) : (
-                              "FABRICATION COMPLETE"
-                          )}
+                      <h3 className="font-tech text-2xl text-white mb-6 animate-pulse uppercase tracking-widest text-center">
+                          {isRevealing ? 'FABRICATING...' : 'FABRICATION COMPLETE'}
                       </h3>
-                      
-                      <div className="my-6 flex flex-col items-center w-full">
-                          {/* Animated Icon Container */}
-                          <motion.div 
-                               animate={isRevealing ? { scale: [1, 1.1, 1] } : { scale: 1.1, rotate: [0, -5, 5, 0] }}
-                               transition={isRevealing ? { duration: 0.1, repeat: Infinity } : { type: "spring", bounce: 0.5 }}
-                               className={`w-28 h-28 rounded-full bg-slate-950 border-4 flex items-center justify-center mb-6 shadow-2xl relative z-10 transition-colors duration-200 ${RARITY_CONFIG[displayRarity].borderColor} ${RARITY_CONFIG[displayRarity].glowColor}`}
-                          >
-                                {isGear(craftedPreview) ? (
-                                    craftedPreview.type === GearType.BEAK ? <Swords size={48} className={RARITY_CONFIG[displayRarity].color} /> : <Wind size={48} className={RARITY_CONFIG[displayRarity].color} />
-                                ) : (
-                                    <Hexagon size={48} className={RARITY_CONFIG[displayRarity].color} />
-                                )}
-                          </motion.div>
 
-                          {/* Name & Tier */}
-                          <div className={`text-xl font-bold font-tech text-center leading-tight transition-all duration-200 ${isRevealing ? 'text-slate-500 blur-sm scale-90' : RARITY_CONFIG[displayRarity].color}`}>
-                              {isRevealing ? 'UNKNOWN ITEM' : craftedPreview.name}
-                          </div>
-                          
-                          <div className="text-sm font-bold uppercase tracking-widest text-slate-500 mt-2 transition-all">
-                              {isRevealing ? 'CALCULATING QUALITY...' : `${RARITY_CONFIG[displayRarity].name} TIER`}
-                          </div>
-                          
-                          {/* Stats Container - Hidden/Blurred during reveal */}
-                          <div className={`w-full transition-all duration-500 ${isRevealing ? 'opacity-0 blur-md scale-95 pointer-events-none' : 'opacity-100 blur-0 scale-100'}`}>
-                              {isGear(craftedPreview) ? (
-                                  <>
-                                      <div className="mt-4 grid grid-cols-2 gap-4 text-center w-full mb-4">
-                                          <div className="bg-slate-950 p-2 rounded border border-slate-800">
-                                              <div className="text-[10px] text-slate-500 uppercase">ATK Bonus</div>
-                                              <div className={`text-xl font-mono ${RARITY_CONFIG[craftedPreview.rarity].color}`}>+{craftedPreview.attackBonus}</div>
+                      {/* Icon */}
+                      <div className={`w-24 h-24 rounded bg-slate-950 border-2 flex items-center justify-center mb-6 shadow-lg ${RARITY_CONFIG[displayRarity].borderColor}`}>
+                          {isGear(craftedPreview) ? (
+                              craftedPreview.type === GearType.BEAK 
+                                ? <Swords size={48} className={RARITY_CONFIG[displayRarity].color} /> 
+                                : <Wind size={48} className={RARITY_CONFIG[displayRarity].color} />
+                          ) : (
+                              <Hexagon size={48} className={RARITY_CONFIG[displayRarity].color} />
+                          )}
+                      </div>
+
+                      {/* Item Details */}
+                      <div className="w-full text-center mb-6">
+                          {isRevealing ? (
+                              <div className="flex flex-col items-center gap-2">
+                                  <div className="w-full h-6 bg-slate-800 rounded animate-pulse" />
+                                  <div className="w-1/2 h-4 bg-slate-800 rounded animate-pulse" />
+                              </div>
+                          ) : (
+                              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                                  <div className={`font-tech font-bold text-xl ${RARITY_CONFIG[craftedPreview.rarity].color} mb-1`}>
+                                      {craftedPreview.name}
+                                  </div>
+                                  <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">
+                                      {RARITY_CONFIG[craftedPreview.rarity].name} TIER
+                                  </div>
+                                  
+                                  {isGear(craftedPreview) ? (
+                                      <>
+                                          {/* Stats Grid - Matching Roster Popup Layout */}
+                                          <div className="w-full grid grid-cols-2 gap-4 mb-4">
+                                              <div className="bg-slate-950 p-2 rounded border border-slate-800 text-center">
+                                                  <div className="text-[10px] text-slate-500 uppercase font-bold">ATK Bonus</div>
+                                                  <div className={`text-lg font-mono ${RARITY_CONFIG[craftedPreview.rarity].color}`}>+{craftedPreview.attackBonus}</div>
+                                              </div>
+                                              {craftedPreview.prefix && craftedPreview.paramValue ? (
+                                                  <div className="bg-slate-950 p-2 rounded border border-slate-800 text-center">
+                                                      <div className="text-[10px] text-slate-500 uppercase font-bold">{getPrefixLabel(craftedPreview.prefix)}</div>
+                                                      <div className="text-lg font-mono text-cyan-400">
+                                                          {craftedPreview.prefix === GearPrefix.QUALITY ? '+' : ''}{craftedPreview.paramValue}{craftedPreview.prefix === GearPrefix.QUALITY ? '' : '%'}
+                                                      </div>
+                                                  </div>
+                                              ) : (
+                                                  <div className="bg-slate-950 p-2 rounded border border-slate-800 text-center opacity-50">
+                                                      <div className="text-[10px] text-slate-500 uppercase font-bold">Prefix</div>
+                                                      <div className="text-lg font-mono text-slate-600">-</div>
+                                                  </div>
+                                              )}
                                           </div>
-                                          {craftedPreview.prefix && craftedPreview.paramValue && (
-                                              <div className="bg-slate-950 p-2 rounded border border-slate-800">
-                                                  <div className="text-[10px] text-slate-500 uppercase">{getPrefixLabel(craftedPreview.prefix)}</div>
-                                                  <div className="text-xl font-mono text-cyan-400">
-                                                      {craftedPreview.prefix === GearPrefix.QUALITY ? '+' : ''}{craftedPreview.paramValue}{craftedPreview.prefix === GearPrefix.QUALITY ? '' : '%'}
+
+                                          {/* Stat Bonuses */}
+                                          {craftedPreview.statBonuses.length > 0 && (
+                                              <div className="w-full bg-slate-950/50 p-3 rounded border border-slate-800 mb-4">
+                                                  <div className="text-[10px] text-slate-500 font-bold uppercase mb-2">Stat Boosts</div>
+                                                  <div className="grid grid-cols-2 gap-2">
+                                                      {craftedPreview.statBonuses.map((bonus, i) => (
+                                                          <div key={i} className={`text-xs font-mono font-bold flex justify-between ${RARITY_CONFIG[bonus.rarity].color}`}>
+                                                              <span>{BUFF_LABELS[bonus.stat] || bonus.stat}</span>
+                                                              <span>+{bonus.value}</span>
+                                                          </div>
+                                                      ))}
                                                   </div>
                                               </div>
                                           )}
-                                      </div>
 
-                                      {/* Gear Stat Bonuses */}
-                                      {craftedPreview.statBonuses && craftedPreview.statBonuses.length > 0 && (
-                                          <div className="w-full bg-slate-950/50 p-3 rounded border border-slate-800 mb-2">
-                                              <div className="text-[10px] text-slate-500 font-bold uppercase mb-2">Stat Boosts</div>
-                                              <div className="grid grid-cols-2 gap-2">
-                                                  {craftedPreview.statBonuses.map((bonus, i) => (
-                                                      <div key={i} className={`text-xs font-mono font-bold flex justify-between ${RARITY_CONFIG[bonus.rarity].color}`}>
-                                                          <span>{BUFF_LABELS[bonus.stat] || bonus.stat}</span>
-                                                          <span>+{bonus.value}</span>
-                                                      </div>
-                                                  ))}
+                                          {/* Sockets */}
+                                          {craftedPreview.sockets.length > 0 && (
+                                              <div className="flex flex-col items-center gap-2 mb-4">
+                                                  <div className="flex justify-center gap-2">
+                                                      {craftedPreview.sockets.map((_, i) => (
+                                                          <div key={i} className="w-4 h-4 rounded-full bg-slate-900 border-2 border-slate-700 shadow-inner" />
+                                                      ))}
+                                                  </div>
+                                                  <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Empty Socket{craftedPreview.sockets.length > 1 ? 's' : ''}</div>
                                               </div>
+                                          )}
+                                      </>
+                                  ) : (
+                                      // Gem Display
+                                      <div className="w-full bg-slate-950/50 p-3 rounded border border-slate-800 mb-4">
+                                          <div className="space-y-1">
+                                              {(craftedPreview as Gem).buffs.map((b, i) => (
+                                                  <div key={i} className={`flex justify-between font-mono text-xs ${RARITY_CONFIG[b.rarity].color}`}>
+                                                      <span>{BUFF_LABELS[b.stat]}</span>
+                                                      <span>+{b.value}%</span>
+                                                  </div>
+                                              ))}
                                           </div>
-                                      )}
-
-                                      {/* Sockets Visual */}
-                                      {craftedPreview.sockets && craftedPreview.sockets.length > 0 && (
-                                            <div className="flex items-center gap-2 mb-4 bg-slate-950/50 px-4 py-2 rounded-full border border-slate-800">
-                                                <span className="text-[10px] text-slate-500 font-bold uppercase mr-2">Open Sockets</span>
-                                                {craftedPreview.sockets.map((_, i) => (
-                                                    <div key={i} className="w-4 h-4 rounded-full border border-slate-500 bg-slate-800" />
-                                                ))}
-                                            </div>
-                                      )}
-                                  </>
-                              ) : (
-                                  // Gem Buffs
-                                  <div className="w-full bg-slate-950/50 p-3 rounded border border-slate-800 mt-4 mb-2">
-                                      <div className="text-[10px] text-slate-500 font-bold uppercase mb-2">Utility Buffs</div>
-                                      <div className="space-y-1">
-                                          {(craftedPreview as Gem).buffs.map((buff, i) => (
-                                              <div key={i} className={`text-xs font-mono font-bold flex justify-between ${RARITY_CONFIG[buff.rarity].color}`}>
-                                                  <span>{BUFF_LABELS[buff.stat] || buff.stat}</span>
-                                                  <span>+{buff.value}%</span>
-                                              </div>
-                                          ))}
                                       </div>
+                                  )}
+                              </motion.div>
+                          )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      {!isRevealing && (
+                          <div className="flex gap-3 w-full">
+                              <Button fullWidth variant="danger" onClick={() => handleDecision(false)}>
+                                  <div className="flex flex-col items-center leading-none py-1">
+                                      <span className="flex items-center gap-2"><Trash2 size={14} /> SALVAGE</span>
+                                      <span className="text-[9px] opacity-80 mt-1">+{getSalvageValues(craftedPreview).feathers} F / +{getSalvageValues(craftedPreview).scrap} S</span>
                                   </div>
-                              )}
+                              </Button>
+                              <Button fullWidth onClick={() => handleDecision(true)}>
+                                  KEEP
+                              </Button>
                           </div>
-                      </div>
-
-                      <div className="flex gap-3 w-full mt-auto">
-                          <Button fullWidth variant="secondary" onClick={() => handleDecision(false)} disabled={isRevealing}>
-                              <div className="flex flex-col items-center">
-                                  <span className="flex items-center gap-2"><Trash2 size={16} /> SALVAGE</span>
-                                  <span className="text-[9px] text-slate-400">+{getSalvageValues(craftedPreview).scrap} Scrap</span>
-                              </div>
-                          </Button>
-                          <Button fullWidth onClick={() => handleDecision(true)} disabled={isRevealing}>
-                               <span className="flex items-center gap-2"><Database size={16} /> KEEP</span>
-                          </Button>
-                      </div>
-
+                      )}
                   </motion.div>
               </motion.div>
           )}

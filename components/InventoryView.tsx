@@ -298,7 +298,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                                     <div className="relative z-10 w-full flex justify-end border-t border-slate-800 pt-3 mt-auto">
                                         <div className="flex items-center gap-4">
                                             <div className="text-[10px] text-right text-slate-600 group-hover:text-slate-400 transition-colors">
-                                                +{salvage.scrap} SCRAP
+                                                +{salvage.feathers} F / +{salvage.scrap} S
                                             </div>
                                             <Button 
                                                 size="sm" 

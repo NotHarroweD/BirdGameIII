@@ -8,7 +8,7 @@ export const UPGRADE_COSTS = {
   HEAL: 10,
   CRAFT_GEAR: 250, 
   CRAFT_SCRAP: 25,
-  CRAFT_GEM: 1000,
+  CRAFT_GEM: 500,
   CRAFT_GEM_SCRAP: 50
 };
 

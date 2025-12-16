@@ -282,6 +282,7 @@ export interface BattleLog {
 export interface ZoneClearReward {
   feathers: number;
   scrap: number;
+  consumable?: Consumable;
 }
 
 export interface BattleResult {

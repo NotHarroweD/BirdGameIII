@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { BirdInstance, BattleBird, Move, BattleLog, MoveType, Altitude, Weather, SkillCheckType, BattleResult, Rarity, Gear, StatType, Gem, ActiveBuff, ConsumableType, Consumable, APShopState, GearPrefix, EnemyPrefix, ZoneClearReward } from '../types';
-import { BIRD_TEMPLATES, RARITY_CONFIG, rollRarity, generateBird, XP_TABLE, BUFF_LABELS, generateGem } from '../constants';
+import { BirdInstance, BattleBird, Move, BattleLog, MoveType, Altitude, Weather, SkillCheckType, BattleResult, Rarity, Gear, StatType, Gem, ActiveBuff, ConsumableType, Consumable, APShopState, GearPrefix, EnemyPrefix, ZoneClearReward, GearType } from '../types';
+import { BIRD_TEMPLATES, RARITY_CONFIG, rollRarity, generateBird, XP_TABLE, BUFF_LABELS, generateGem, generateCraftedGear } from '../constants';
 import { Button } from './Button';
 import { HealthBar } from './HealthBar';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
@@ -619,29 +619,27 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           }
 
           let gemReward: Gem | undefined;
-          // Only drop gems if unlocked
-          if (gemUnlocked) {
-              let totalGemChance = 0;
-              
-              if (opponent.enemyPrefix === EnemyPrefix.GEMFINDER) {
-                  // Guaranteed Gem Drop for Gemfinders
-                  totalGemChance = 1000;
-              } else {
-                  const baseGemChance = 0.5; 
-                  let rarityGemBonus = 0;
-                  switch (opponentBird.rarity) {
-                      case Rarity.RARE: rarityGemBonus = 0.5; break;
-                      case Rarity.EPIC: rarityGemBonus = 1.5; break;
-                      case Rarity.LEGENDARY: rarityGemBonus = 3.0; break;
-                      case Rarity.MYTHIC: rarityGemBonus = 5.0; break;
-                  }
-                  totalGemChance = (baseGemChance + rarityGemBonus + gemFindBonus) * apGemMult;
+          let totalGemChance = 0;
+          
+          // Check for Gemfinder prefix first to guarantee drop regardless of unlock status
+          if (opponent.enemyPrefix === EnemyPrefix.GEMFINDER) {
+              totalGemChance = 1000;
+          } else if (gemUnlocked) {
+              // Only drop standard gems if unlocked
+              const baseGemChance = 0.5; 
+              let rarityGemBonus = 0;
+              switch (opponentBird.rarity) {
+                  case Rarity.RARE: rarityGemBonus = 0.5; break;
+                  case Rarity.EPIC: rarityGemBonus = 1.5; break;
+                  case Rarity.LEGENDARY: rarityGemBonus = 3.0; break;
+                  case Rarity.MYTHIC: rarityGemBonus = 5.0; break;
               }
-              
-              if (Math.random() * 100 < totalGemChance) {
-                  const gem = generateGem(rollRarity(opponentBird.rarity === Rarity.COMMON ? 0 : 2)); 
-                  gemReward = gem;
-              }
+              totalGemChance = (baseGemChance + rarityGemBonus + gemFindBonus) * apGemMult;
+          }
+          
+          if (Math.random() * 100 < totalGemChance) {
+              const gem = generateGem(rollRarity(opponentBird.rarity === Rarity.COMMON ? 0 : 2)); 
+              gemReward = gem;
           }
 
           let consumableReward: Consumable | undefined;
@@ -674,22 +672,46 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           const isHighestZone = enemyLevel === highestZone;
           
           if (isHighestZone) {
-              // Construct hypothetical progress including this battle's win
-              const currentSet = new Set(currentZoneProgress);
-              const alreadyHas = currentSet.has(opponent.rarity);
-              currentSet.add(opponent.rarity);
-              
-              const allRequiredMet = requiredRarities?.every(r => currentSet.has(r)) ?? false;
-              
-              // Only trigger if we just completed the set (this win was the missing piece)
-              if (allRequiredMet && !alreadyHas) {
-                  zoneClearReward = {
-                      feathers: enemyLevel * 200,
-                      scrap: enemyLevel * 50
-                  };
-                  // Trigger the popup immediately
-                  if (onZoneCleared) {
-                      onZoneCleared(zoneClearReward);
+              // Use flexible matching logic similar to GameLogic to ensure popup triggers correctly
+              const RARITY_ORDER = [Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE, Rarity.EPIC, Rarity.LEGENDARY, Rarity.MYTHIC];
+              const opponentRarityIdx = RARITY_ORDER.indexOf(opponent.rarity);
+              let satisfiedRarity: Rarity | null = null;
+
+              if (!currentZoneProgress.includes(opponent.rarity)) {
+                  satisfiedRarity = opponent.rarity;
+              } else {
+                  // Check if this victory satisfies a lower pending requirement
+                  for (const req of requiredRarities) {
+                      if (!currentZoneProgress.includes(req)) {
+                          const reqIdx = RARITY_ORDER.indexOf(req);
+                          if (opponentRarityIdx >= reqIdx) {
+                              satisfiedRarity = req;
+                              break;
+                          }
+                      }
+                  }
+              }
+
+              if (satisfiedRarity) {
+                  // Construct hypothetical progress including this battle's win
+                  const newProgress = [...currentZoneProgress, satisfiedRarity];
+                  const isZoneCleared = requiredRarities?.every(r => newProgress.includes(r)) ?? false;
+                  
+                  if (isZoneCleared) {
+                      const type = Math.random() < 0.5 ? ConsumableType.HUNTING_SPEED : ConsumableType.BATTLE_REWARD;
+                      // Generate rarity based on zone difficulty
+                      const rarity = rollRarity(enemyLevel * 10, 'CRAFT', 1);
+                      const rewardItem: Consumable = { type, rarity, count: 1 };
+
+                      zoneClearReward = {
+                          feathers: enemyLevel * 200,
+                          scrap: enemyLevel * 50,
+                          consumable: rewardItem
+                      };
+                      // Trigger the popup immediately via App handler to credit rewards now
+                      if (onZoneCleared) {
+                          onZoneCleared(zoneClearReward);
+                      }
                   }
               }
           }
@@ -698,8 +720,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               setResultData({ 
                   winner: 'player', 
                   opponentRarity: opponent.rarity,
-                  rewards: { xp: xpReward, feathers: featherReward, scrap: scrapReward, diamonds: diamondReward, gem: gemReward, consumable: consumableReward },
-                  zoneClearReward 
+                  // Note: zoneClearReward is intentionally NOT passed here to prevent double-crediting in handleBattleComplete
+                  rewards: { xp: xpReward, feathers: featherReward + (zoneClearReward?.feathers || 0), scrap: scrapReward + (zoneClearReward?.scrap || 0), diamonds: diamondReward, gem: gemReward, consumable: consumableReward },
               });
           }, 1500);
       } else {
@@ -753,6 +775,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
            if (secondaryMultiplier === 1.0) { text = "MAX DRAIN!"; color = "text-purple-400"; }
            else if (secondaryMultiplier === 0.1) { text = "POOR ABSORB"; color = "text-slate-400"; }
       }
+      // Explicitly set target to 'opponent' so it appears on the right side of the screen (enemy side)
       spawnFloatingText(text, 'opponent', 0, -50, color, 2);
       executeMove(playerBirdRef.current, opponentBirdRef.current, check.move, true, multiplier, secondaryMultiplier);
   };

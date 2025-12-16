@@ -50,7 +50,8 @@ export const Hub: React.FC<HubProps> = ({
   playerState.huntingBirdIds.forEach(id => {
       const bird = playerState.birds.find(b => b.instanceId === id);
       if (bird) {
-          passiveRate += (bird.huntingConfig.baseRate * RARITY_CONFIG[bird.rarity].minMult * (1 + bird.level * 0.1));
+          // Updated leveling bonus to 0.5 (50%) per level
+          passiveRate += (bird.huntingConfig.baseRate * RARITY_CONFIG[bird.rarity].minMult * (1 + bird.level * 0.5));
       }
   });
 

@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { PlayerState, BirdInstance, BattleResult, GearType, Gear, Rarity, UpgradeState, Gem, ConsumableType, Consumable, Bird, APShopState, UnlocksState } from '../types';
+import { PlayerState, BirdInstance, BattleResult, GearType, Gear, Rarity, UpgradeState, Gem, ConsumableType, Consumable, Bird, APShopState, UnlocksState, ZoneClearReward } from '../types';
 import { INITIAL_PLAYER_STATE, XP_TABLE, UPGRADE_COSTS, generateCraftedGear, RARITY_CONFIG, UPGRADE_DEFINITIONS, generateCraftedGem, CONSUMABLE_STATS, rollRarity, BIRD_TEMPLATES, generateBird, ACHIEVEMENTS, AP_SHOP_ITEMS } from '../constants';
 import { loadGame, saveGame, resetGame } from '../utils/persistence';
 
@@ -49,7 +49,8 @@ export const useGameLogic = () => {
            const updatedBirds = prev.birds.map(bird => {
                if (prev.huntingBirdIds.includes(bird.instanceId)) {
                    const rarityMult = RARITY_CONFIG[bird.rarity].minMult;
-                   let baseIncome = (bird.huntingConfig.baseRate * rarityMult) * (1 + (bird.level * 0.25));
+                   // Updated leveling bonus to 0.5 (50%) per level
+                   let baseIncome = (bird.huntingConfig.baseRate * rarityMult) * (1 + (bird.level * 0.5));
                    baseIncome *= multiplier;
 
                    if (bird.id === 'hummingbird') {
@@ -228,6 +229,40 @@ export const useGameLogic = () => {
       });
   };
 
+  // Called when the "Zone Cleared" popup appears to grant rewards AND handle progression immediately
+  const handleZoneSuccess = (reward: ZoneClearReward, clearedZoneNumber: number) => {
+      setPlayerState(prev => {
+          // Check if this is a new progression (avoid double increment if called multiple times)
+          const isProgression = clearedZoneNumber === prev.highestZone;
+          const newHighestZone = isProgression ? prev.highestZone + 1 : prev.highestZone;
+          
+          const newInventory = { ...prev.inventory };
+          if (reward.consumable) {
+              const existingIdx = newInventory.consumables.findIndex(c => c.type === reward.consumable!.type && c.rarity === reward.consumable!.rarity);
+              if (existingIdx !== -1) {
+                  newInventory.consumables[existingIdx].count += reward.consumable.count;
+              } else {
+                  newInventory.consumables.push(reward.consumable);
+              }
+          }
+
+          return {
+              ...prev,
+              feathers: prev.feathers + reward.feathers,
+              scrap: prev.scrap + reward.scrap,
+              highestZone: newHighestZone,
+              currentZoneProgress: isProgression ? [] : prev.currentZoneProgress, // Reset progress if advanced
+              inventory: newInventory,
+              lifetimeStats: {
+                  ...prev.lifetimeStats,
+                  totalFeathers: prev.lifetimeStats.totalFeathers + reward.feathers,
+                  totalScrap: prev.lifetimeStats.totalScrap + reward.scrap,
+                  highestZoneReached: Math.max(prev.lifetimeStats.highestZoneReached, newHighestZone)
+              }
+          };
+      });
+  };
+
   const handleBattleComplete = (result: BattleResult, selectedZone: number): { pendingZoneUnlock: number | null, shouldAdvanceZone: boolean } => {
       let newHighestZone = playerState.highestZone;
       let newZoneProgress = [...playerState.currentZoneProgress];
@@ -235,6 +270,8 @@ export const useGameLogic = () => {
       let shouldAdvanceZone = false;
 
       if (result.winner === 'player') {
+          // Only check for zone progression if the selected zone MATCHES the current highest zone.
+          // If handleZoneSuccess already ran, highestZone will be selectedZone + 1, so this block safely skips.
           if (selectedZone === playerState.highestZone) {
               const opponentRarityIdx = RARITY_ORDER.indexOf(result.opponentRarity);
               const required = getRequiredRarities(playerState.highestZone);
@@ -288,12 +325,6 @@ export const useGameLogic = () => {
           let newScrap = prev.scrap + result.rewards.scrap;
           const newDiamonds = prev.diamonds + result.rewards.diamonds;
           
-          // Add Zone Clear Rewards if present
-          if (result.zoneClearReward) {
-              newFeathers += result.zoneClearReward.feathers;
-              newScrap += result.zoneClearReward.scrap;
-          }
-
           let newXp = bird.xp + result.rewards.xp;
           let newLevel = bird.level;
           let newXpToNext = bird.xpToNextLevel;
@@ -333,8 +364,8 @@ export const useGameLogic = () => {
               lifetimeStats: {
                   ...prev.lifetimeStats,
                   battlesWon: prev.lifetimeStats.battlesWon + (result.winner === 'player' ? 1 : 0),
-                  totalFeathers: prev.lifetimeStats.totalFeathers + result.rewards.feathers + (result.zoneClearReward?.feathers || 0),
-                  totalScrap: prev.lifetimeStats.totalScrap + result.rewards.scrap + (result.zoneClearReward?.scrap || 0),
+                  totalFeathers: prev.lifetimeStats.totalFeathers + result.rewards.feathers,
+                  totalScrap: prev.lifetimeStats.totalScrap + result.rewards.scrap,
                   highestZoneReached: Math.max(prev.lifetimeStats.highestZoneReached, newHighestZone)
               }
           };
@@ -345,9 +376,11 @@ export const useGameLogic = () => {
 
   const handleUpgrade = (type: keyof UpgradeState | 'recruit'): boolean => {
       if (type === 'recruit') {
-           if (playerState.feathers < UPGRADE_COSTS.RECRUIT) return false;
-           setPlayerState(prev => ({ ...prev, feathers: prev.feathers - UPGRADE_COSTS.RECRUIT }));
-           return true; 
+           setPlayerState(prev => {
+               if (prev.feathers < UPGRADE_COSTS.RECRUIT) return prev;
+               return { ...prev, feathers: prev.feathers - UPGRADE_COSTS.RECRUIT };
+           });
+           return playerState.feathers >= UPGRADE_COSTS.RECRUIT;
       }
 
       const def = UPGRADE_DEFINITIONS.find(u => u.id === type);
@@ -429,14 +462,21 @@ export const useGameLogic = () => {
   const handleTryCraft = (type: GearType): Gear | null => {
       const featherCost = UPGRADE_COSTS.CRAFT_GEAR;
       const scrapCost = UPGRADE_COSTS.CRAFT_SCRAP;
+      
+      // Initial check for immediate feedback (though state setter is the source of truth)
       if (playerState.feathers < featherCost || playerState.scrap < scrapCost) return null;
 
-      setPlayerState(prev => ({
-          ...prev,
-          feathers: prev.feathers - featherCost,
-          scrap: prev.scrap - scrapCost,
-          lifetimeStats: { ...prev.lifetimeStats, totalCrafts: prev.lifetimeStats.totalCrafts + 1 }
-      }));
+      let success = false;
+      setPlayerState(prev => {
+          if (prev.feathers < featherCost || prev.scrap < scrapCost) return prev;
+          success = true;
+          return {
+              ...prev,
+              feathers: prev.feathers - featherCost,
+              scrap: prev.scrap - scrapCost,
+              lifetimeStats: { ...prev.lifetimeStats, totalCrafts: prev.lifetimeStats.totalCrafts + 1 }
+          };
+      });
 
       return generateCraftedGear(type, playerState.upgrades.craftRarityLevel);
   };
@@ -446,12 +486,15 @@ export const useGameLogic = () => {
       const scrapCost = UPGRADE_COSTS.CRAFT_GEM_SCRAP;
       if (playerState.feathers < featherCost || playerState.scrap < scrapCost) return null;
 
-      setPlayerState(prev => ({
-          ...prev,
-          feathers: prev.feathers - featherCost,
-          scrap: prev.scrap - scrapCost,
-          lifetimeStats: { ...prev.lifetimeStats, totalCrafts: prev.lifetimeStats.totalCrafts + 1 }
-      }));
+      setPlayerState(prev => {
+          if (prev.feathers < featherCost || prev.scrap < scrapCost) return prev;
+          return {
+              ...prev,
+              feathers: prev.feathers - featherCost,
+              scrap: prev.scrap - scrapCost,
+              lifetimeStats: { ...prev.lifetimeStats, totalCrafts: prev.lifetimeStats.totalCrafts + 1 }
+          };
+      });
 
       return generateCraftedGem(playerState.upgrades.gemRarityLevel);
   };
@@ -737,6 +780,7 @@ export const useGameLogic = () => {
       setPlayerState(prev => {
           const currentLevel = prev.apShop[id] || 0;
           const cost = item.baseCost + (currentLevel * item.costScale);
+          // Atomic check prevents negative AP
           if (prev.ap < cost) return prev;
 
           return {
@@ -757,23 +801,28 @@ export const useGameLogic = () => {
       else if (feature === 'upgrades') { costFeathers = 1000; costScrap = 200; } 
       else if (feature === 'achievements') { costFeathers = 0; costScrap = 0; }
 
-      if (playerState.feathers >= costFeathers && playerState.scrap >= costScrap) {
-          setPlayerState(prev => {
-              const newState = {
-                  ...prev,
-                  feathers: prev.feathers - costFeathers,
-                  scrap: prev.scrap - costScrap,
-                  unlocks: { ...prev.unlocks, [feature]: true }
-              };
-              if (feature === 'achievements') {
-                  newState.achievementBaselines = { ...prev.lifetimeStats };
-                  newState.lifetimeStats = { ...prev.lifetimeStats, systemUnlocked: 1 };
-              }
-              return newState;
-          });
-          return true; // Unlocked
-      }
-      return false;
+      // Initial check for immediate UI feedback
+      if (playerState.feathers < costFeathers || playerState.scrap < costScrap) return false;
+
+      setPlayerState(prev => {
+          // Atomic check inside setter to prevent race conditions causing negative balance
+          if (prev.feathers < costFeathers || prev.scrap < costScrap) return prev;
+          // Prevent double unlock
+          if (prev.unlocks[feature]) return prev;
+
+          const newState = {
+              ...prev,
+              feathers: prev.feathers - costFeathers,
+              scrap: prev.scrap - costScrap,
+              unlocks: { ...prev.unlocks, [feature]: true }
+          };
+          if (feature === 'achievements') {
+              newState.achievementBaselines = { ...prev.lifetimeStats };
+              newState.lifetimeStats = { ...prev.lifetimeStats, systemUnlocked: 1 };
+          }
+          return newState;
+      });
+      return true;
   };
 
   return {
@@ -783,6 +832,7 @@ export const useGameLogic = () => {
           handleResetData,
           handleReportCatchStats,
           handleTestStart,
+          handleZoneSuccess,
           handleBattleComplete,
           handleUpgrade,
           handleKeepBird,
