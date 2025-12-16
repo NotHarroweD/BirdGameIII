@@ -46,7 +46,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
 }) => {
   const playerStats = getScaledStats(playerBirdInstance, playerBirdInstance.level);
   
-  const [playerBird, setPlayerBird] = useState<BattleBird>({ 
+  const [playerBird, setPlayerBird] = useState<BattleBird | null>({ 
     ...playerStats,
     currentHp: playerStats.maxHp, 
     currentEnergy: playerStats.maxEnergy, 
@@ -367,7 +367,9 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       }
       
       spawnFloatingText(text, 'opponent', 0, -50, color, 2);
-      executeMove(playerBirdRef.current, opponentBirdRef.current!, check.move, true, multiplier, secondaryMultiplier);
+      if (playerBirdRef.current && opponentBirdRef.current) {
+          executeMove(playerBirdRef.current, opponentBirdRef.current, check.move, true, multiplier, secondaryMultiplier);
+      }
   };
 
   const advanceComboStage = () => {
@@ -399,7 +401,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   };
 
   const processAI = (now: number) => {
-      if (winnerRef.current || now < aiNextActionTime.current || !opponentBirdRef.current) return;
+      if (winnerRef.current || now < aiNextActionTime.current || !opponentBirdRef.current || !playerBirdRef.current) return;
       const ai = opponentBirdRef.current;
       const pl = playerBirdRef.current;
       const availableMoves = ai.moves.filter(m => {
@@ -464,8 +466,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       }
       if (now - lastBleedTickRef.current > 1000) {
           lastBleedTickRef.current = now;
-          if (playerBirdRef.current.statusEffects.includes('bleed')) {
-              setPlayerBird(prev => ({...prev, currentHp: Math.max(0, prev.currentHp - Math.floor(prev.maxHp * 0.05))}));
+          if (playerBirdRef.current?.statusEffects.includes('bleed')) {
+              setPlayerBird(prev => prev ? ({...prev, currentHp: Math.max(0, prev.currentHp - Math.floor(prev.maxHp * 0.05))}) : null);
               spawnFloatingText("-BLEED", 'player', -30, 0, "text-rose-600");
           }
           if (opponentBirdRef.current?.statusEffects.includes('bleed')) {
@@ -478,7 +480,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                   setBird((prev: BattleBird | null) => prev ? ({ ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + heal) }) : null);
               }
           };
-          applyVulturePassive(playerBirdRef.current, setPlayerBird as any, 'player');
+          applyVulturePassive(playerBirdRef.current, setPlayerBird, 'player');
           applyVulturePassive(opponentBirdRef.current, setOpponentBird, 'opponent');
       }
       if (delta >= 100) {
@@ -489,7 +491,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
              const effectiveRegen = bird.id === 'hummingbird' ? baseRegen * 1.5 : baseRegen;
              setBird((prev: BattleBird | null) => prev ? ({...prev, currentEnergy: Math.min(prev.maxEnergy, prev.currentEnergy + (effectiveRegen * factor))}) : null);
           };
-          applyEnergyRegen(playerBirdRef.current, setPlayerBird as any);
+          applyEnergyRegen(playerBirdRef.current, setPlayerBird);
           applyEnergyRegen(opponentBirdRef.current, setOpponentBird);
           processAI(now);
           lastTickRef.current = now;
@@ -502,8 +504,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   const stopLoop = () => cancelAnimationFrame(animationFrameRef.current);
   
   const handleMove = (move: Move) => {
-      if (winner || activeSkillCheck || playerBird.currentEnergy < move.cost) return;
-      setPlayerBird(prev => ({...prev, currentEnergy: prev.currentEnergy - move.cost}));
+      if (winner || activeSkillCheck || !playerBird || playerBird.currentEnergy < move.cost) return;
+      setPlayerBird(prev => prev ? ({...prev, currentEnergy: prev.currentEnergy - move.cost}) : null);
       triggerCooldown(move.id, move.cooldown);
       if (move.skillCheck && move.skillCheck !== SkillCheckType.NONE) {
           let reflexTargets = undefined;
@@ -524,7 +526,9 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               reflexTargets
           });
       } else {
-          executeMove(playerBirdRef.current, opponentBirdRef.current!, move, true, 1.0);
+          if (playerBirdRef.current && opponentBirdRef.current) {
+              executeMove(playerBirdRef.current, opponentBirdRef.current, move, true, 1.0);
+          }
       }
   };
   
@@ -576,7 +580,9 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               
               setTimeout(() => {
                   setActiveSkillCheck(null);
-                  executeMove(playerBirdRef.current, opponentBirdRef.current!, prev.move, true, multiplier);
+                  if (playerBirdRef.current && opponentBirdRef.current) {
+                      executeMove(playerBirdRef.current, opponentBirdRef.current, prev.move, true, multiplier);
+                  }
               }, 100);
               
               return { ...prev, reflexTargets: newTargets };
@@ -586,7 +592,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       });
   };
 
-  if (!opponentBird) return <div className="h-screen bg-slate-950 flex items-center justify-center text-white">INITIALIZING COMBAT...</div>;
+  if (!opponentBird || !playerBird) return <div className="h-screen bg-slate-950 flex items-center justify-center text-white">INITIALIZING COMBAT...</div>;
 
   return (
     <div className="h-[100dvh] w-full bg-slate-950 relative overflow-hidden flex flex-col font-sans">
