@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { PlayerState, BirdInstance, BattleResult, GearType, Gear, Rarity, UpgradeState, Gem, ConsumableType, Consumable, Bird, APShopState, UnlocksState, ZoneClearReward } from '../types';
+import { PlayerState, BirdInstance, BattleResult, GearType, Gear, Rarity, UpgradeState, Gem, ConsumableType, Consumable, Bird, APShopState, UnlocksState, ZoneClearReward, StatType } from '../types';
 import { INITIAL_PLAYER_STATE, XP_TABLE, UPGRADE_COSTS, generateCraftedGear, RARITY_CONFIG, UPGRADE_DEFINITIONS, generateCraftedGem, CONSUMABLE_STATS, rollRarity, BIRD_TEMPLATES, generateBird, ACHIEVEMENTS, AP_SHOP_ITEMS } from '../constants';
 import { loadGame, saveGame, resetGame } from '../utils/persistence';
 
@@ -372,6 +372,26 @@ export const useGameLogic = () => {
       });
 
       return { pendingZoneUnlock, shouldAdvanceZone };
+  };
+
+  const handleApplyLevelUpReward = (birdId: string, stat: StatType, value: number) => {
+      setPlayerState(prev => {
+          const birdIndex = prev.birds.findIndex(b => b.instanceId === birdId);
+          if (birdIndex === -1) return prev;
+          
+          const bird = { ...prev.birds[birdIndex] };
+          
+          if (stat === 'HP') bird.baseHp += value;
+          else if (stat === 'NRG') bird.baseEnergy += value;
+          else if (stat === 'ATK') bird.baseAttack += value;
+          else if (stat === 'DEF') bird.baseDefense += value;
+          else if (stat === 'SPD') bird.baseSpeed += value;
+          
+          const newBirds = [...prev.birds];
+          newBirds[birdIndex] = bird;
+          
+          return { ...prev, birds: newBirds };
+      });
   };
 
   const handleUpgrade = (type: keyof UpgradeState | 'recruit'): boolean => {
@@ -834,6 +854,7 @@ export const useGameLogic = () => {
           handleTestStart,
           handleZoneSuccess,
           handleBattleComplete,
+          handleApplyLevelUpReward,
           handleUpgrade,
           handleKeepBird,
           handleReleaseBird,

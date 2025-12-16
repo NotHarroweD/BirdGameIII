@@ -159,7 +159,7 @@ export default function App() {
   };
 
   return (
-    <div className="bg-slate-950 text-white font-sans overflow-x-hidden relative">
+    <div className="bg-slate-900 text-white font-sans overflow-x-hidden relative">
       {screen === GameScreen.MENU && (
          <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-slate-950 relative overflow-hidden select-none touch-none">
              {/* ... Menu Content ... */}
@@ -321,6 +321,7 @@ export default function App() {
             highestZone={playerState.highestZone}
             onBattleComplete={handleBattleComplete}
             onZoneCleared={handleZoneCleared}
+            onApplyLevelUpReward={actions.handleApplyLevelUpReward}
             activeBuffs={playerState.activeBuffs}
             apShop={playerState.apShop}
             currentZoneProgress={playerState.currentZoneProgress}
