@@ -225,33 +225,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
       return '';
   };
 
-  const renderGearIconMini = (gear: Gear | null, type: 'beak' | 'claws') => {
-        if (!gear) return (
-            <div className="w-8 h-8 rounded bg-slate-950/50 border border-slate-800 flex items-center justify-center opacity-30">
-                {type === 'beak' ? <Swords size={14} /> : <Wind size={14} />}
-            </div>
-        );
-        
-        const gearConfig = RARITY_CONFIG[gear.rarity];
-        
-        return (
-            <div className={`relative w-8 h-8 rounded bg-slate-900 border ${gearConfig.borderColor} flex items-center justify-center shadow-sm`}>
-                {type === 'beak' ? <Swords size={14} className={gearConfig.color} /> : <Wind size={14} className={gearConfig.color} />}
-                {/* Sockets Dots */}
-                {gear.sockets && gear.sockets.length > 0 && (
-                    <div className="absolute -bottom-1 -right-1 flex gap-0.5 bg-slate-950 rounded px-0.5 border border-slate-800 shadow-sm z-10">
-                        {gear.sockets.map((gem, idx) => (
-                            <div 
-                                key={idx} 
-                                className={`w-1.5 h-1.5 rounded-full ${gem ? RARITY_CONFIG[gem.rarity].color.replace('text-', 'bg-') : 'bg-slate-700'}`} 
-                            />
-                        ))}
-                    </div>
-                )}
-            </div>
-        );
-  };
-
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-500">
       
@@ -331,7 +304,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
           </div>
       )}
 
-      {/* 2. Detail View */}
+      {/* 2. Detail View (Now Above List) */}
       {selectedBird ? (
         <Card variant="glass" rarity={selectedBird.rarity} className="clip-tech relative overflow-hidden">
              <div className={`absolute -right-20 -top-20 w-64 h-64 rounded-full blur-[100px] opacity-20 ${RARITY_CONFIG[selectedBird.rarity].glowColor.replace('shadow-', 'bg-')}`} />
@@ -472,6 +445,87 @@ export const RosterView: React.FC<RosterViewProps> = ({
       ) : (
         <div className="p-8 text-center text-slate-500 italic">No bird selected.</div>
       )}
+
+      {/* 3. Bird Roster List (Vertical) */}
+      <div className="grid grid-cols-1 gap-3">
+        {playerState.birds.map((bird) => {
+            const isSelected = bird.instanceId === playerState.selectedBirdId;
+            const isHuntingBird = playerState.huntingBirdIds.includes(bird.instanceId);
+            return (
+                <div
+                    key={bird.instanceId}
+                    onClick={() => onSelectBird(bird.instanceId)}
+                    className={`
+                        w-full p-2 rounded-lg border-2 flex items-center justify-between transition-all relative overflow-hidden group cursor-pointer
+                        ${isSelected 
+                            ? `${RARITY_CONFIG[bird.rarity].borderColor} bg-slate-800 shadow-lg` 
+                            : 'border-slate-800 bg-slate-900 hover:border-slate-600 hover:bg-slate-800'}
+                    `}
+                >
+                    <div className="flex items-center gap-4">
+                        <div className={`w-14 h-14 rounded-lg overflow-hidden border-2 shrink-0 ${RARITY_CONFIG[bird.rarity].borderColor} bg-slate-950 relative`}>
+                            <img 
+                                src={bird.imageUrl} 
+                                className="w-full h-full object-cover" 
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                    e.currentTarget.src = 'https://placehold.co/400x400/1e293b/475569?text=' + bird.name;
+                                }}
+                            />
+                            {isHuntingBird && (
+                                <div className="absolute top-0 right-0 p-0.5 bg-black/50 rounded-bl">
+                                    <Target size={10} className="text-amber-400 animate-pulse" />
+                                </div>
+                            )}
+                        </div>
+                        <div className="text-left">
+                            <div className={`font-tech font-bold text-lg leading-none ${RARITY_CONFIG[bird.rarity].color}`}>{bird.name}</div>
+                            <div className="text-xs text-white font-mono">Lvl {bird.level}</div>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                        {['beak', 'claws'].map((slot) => {
+                            const gear = slot === 'beak' ? bird.gear.beak : bird.gear.claws;
+                            return (
+                                <div 
+                                    key={slot} 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onSelectBird(bird.instanceId);
+                                        if (gear) {
+                                            setViewingSlot(slot as 'beak' | 'claws');
+                                        } else {
+                                            setEquipSlot(slot as 'beak' | 'claws');
+                                        }
+                                    }}
+                                    className={`w-10 h-10 rounded border flex items-center justify-center relative transition-transform hover:scale-105 cursor-pointer ${gear ? RARITY_CONFIG[gear.rarity].borderColor + ' bg-slate-800' : 'border-slate-700 border-dashed bg-slate-900/50 hover:border-cyan-500'}`}
+                                >
+                                    {slot === 'beak' ? <Swords size={16} className={gear ? RARITY_CONFIG[gear.rarity].color : 'text-slate-600'} /> : <Wind size={16} className={gear ? RARITY_CONFIG[gear.rarity].color : 'text-slate-600'} />}
+                                    
+                                    {/* Sockets Dots */}
+                                    {gear && gear.sockets && gear.sockets.length > 0 && (
+                                        <div className="absolute -bottom-1 flex gap-0.5">
+                                            {gear.sockets.map((s, i) => (
+                                                <div key={i} className={`w-1.5 h-1.5 rounded-full border ${s ? RARITY_CONFIG[s.rarity].color.replace('text-', 'bg-') + ' border-transparent' : 'bg-slate-900 border-slate-500'}`} />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        })}
+        
+        {/* Capacity Slots */}
+        {Array.from({ length: Math.max(0, currentCapacity - playerState.birds.length) }).map((_, i) => (
+            <div key={`empty-${i}`} className="w-full h-16 rounded-lg border-2 border-dashed border-slate-800 bg-slate-900/30 flex items-center justify-center">
+                <div className="text-slate-700 text-xs font-bold uppercase">Empty Slot</div>
+            </div>
+        ))}
+      </div>
 
       {/* --- MODALS --- */}
       <AnimatePresence>
