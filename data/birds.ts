@@ -208,6 +208,7 @@ export const generateBird = (template: BirdTemplate, rarity: Rarity): BirdInstan
     level: 1,
     xp: 0,
     xpToNextLevel: 100,
+    statPoints: 0,
     kills: 0,
     prestigeLevel: 0,
     gear: {

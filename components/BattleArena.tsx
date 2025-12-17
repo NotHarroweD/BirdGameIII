@@ -21,7 +21,8 @@ interface BattleArenaProps {
   playerBirdInstance: BirdInstance;
   enemyLevel: number;
   highestZone: number;
-  onBattleComplete: (result: BattleResult, playAgain: boolean) => void;
+  onReportResults: (result: BattleResult) => void;
+  onBattleExit: (playAgain: boolean) => void;
   onZoneCleared?: (reward: ZoneClearReward) => void;
   onApplyLevelUpReward?: (birdId: string, stat: StatType, value: number) => void;
   activeBuffs?: ActiveBuff[]; 
@@ -35,7 +36,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     playerBirdInstance, 
     enemyLevel, 
     highestZone,
-    onBattleComplete, 
+    onReportResults,
+    onBattleExit, 
     onZoneCleared,
     onApplyLevelUpReward,
     activeBuffs = [], 
@@ -44,6 +46,9 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     requiredRarities = [],
     gemUnlocked = false
 }) => {
+  // Store initial bird for level up display comparison in overlay
+  const initialPlayerBird = useRef<BirdInstance>(playerBirdInstance);
+
   const playerStats = getScaledStats(playerBirdInstance, playerBirdInstance.level);
   
   const [playerBird, setPlayerBird] = useState<BattleBird | null>({ 
@@ -54,6 +59,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     statusEffects: [],
     altitude: Altitude.LOW
   });
+
+  const [playerTurnCount, setPlayerTurnCount] = useState(0);
 
   const opponentRef = useRef<BirdInstance | null>(null);
   
@@ -263,6 +270,13 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               gemUnlocked
           );
 
+          // Report results immediately to update Global State
+          onReportResults({
+              winner: 'player',
+              opponentRarity: opponentBirdRef.current.rarity,
+              rewards
+          });
+
           // Zone Clear Logic
           let zoneClearReward: ZoneClearReward | undefined;
           const isHighestZone = enemyLevel === highestZone;
@@ -315,6 +329,13 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               });
           }, 1500);
       } else {
+          // Loss - report minimal/zero result
+          onReportResults({
+              winner: 'opponent',
+              opponentRarity: opponentBirdRef.current.rarity,
+              rewards: { xp: 0, feathers: 0, scrap: 0, diamonds: 0 }
+          });
+
           setTimeout(() => {
               setResultData({ 
                   winner: 'opponent', 
@@ -323,6 +344,12 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               });
           }, 1500);
       }
+  };
+
+  const handleFlee = () => {
+      stopLoop();
+      // Exit without reporting results (no rewards, no loss penalty in stats)
+      onBattleExit(false);
   };
 
   // --- Resolve Minigame Logic (Unchanged from original) ---
@@ -464,25 +491,61 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               }
           }
       }
-      if (now - lastBleedTickRef.current > 1000) {
+      
+      // Increased bleed interval from 1000ms to 2000ms as requested
+      if (now - lastBleedTickRef.current > 2000) {
           lastBleedTickRef.current = now;
+          
+          let playerDied = false;
+          let opponentDied = false;
+
+          // Player Bleed
           if (playerBirdRef.current?.statusEffects.includes('bleed')) {
-              setPlayerBird(prev => prev ? ({...prev, currentHp: Math.max(0, prev.currentHp - Math.floor(prev.maxHp * 0.05))}) : null);
-              spawnFloatingText("-BLEED", 'player', -30, 0, "text-rose-600");
+              const dmg = Math.floor(playerBirdRef.current.maxHp * 0.05);
+              const remaining = playerBirdRef.current.currentHp - dmg;
+              
+              if (remaining <= 0) {
+                  playerDied = true;
+                  setPlayerBird(prev => prev ? ({...prev, currentHp: 0}) : null);
+                  handleWin('opponent');
+              } else {
+                  setPlayerBird(prev => prev ? ({...prev, currentHp: remaining}) : null);
+                  spawnFloatingText("-BLEED", 'player', -30, 0, "text-rose-600");
+              }
           }
-          if (opponentBirdRef.current?.statusEffects.includes('bleed')) {
-              setOpponentBird(prev => prev ? ({...prev, currentHp: Math.max(0, prev.currentHp - Math.floor(prev.maxHp * 0.05))}) : null);
-              spawnFloatingText("-BLEED", 'opponent', 30, 0, "text-rose-600");
+
+          // Opponent Bleed
+          if (!winnerRef.current && !playerDied && opponentBirdRef.current?.statusEffects.includes('bleed')) {
+              const dmg = Math.floor(opponentBirdRef.current.maxHp * 0.05);
+              const remaining = opponentBirdRef.current.currentHp - dmg;
+
+              if (remaining <= 0) {
+                  opponentDied = true;
+                  setOpponentBird(prev => prev ? ({...prev, currentHp: 0}) : null);
+                  handleWin('player');
+              } else {
+                  setOpponentBird(prev => prev ? ({...prev, currentHp: remaining}) : null);
+                  spawnFloatingText("-BLEED", 'opponent', 30, 0, "text-rose-600");
+              }
           }
-          const applyVulturePassive = (bird: BattleBird | null, setBird: React.Dispatch<React.SetStateAction<BattleBird | null>>, target: 'player'|'opponent') => {
+
+          // Vulture Passive
+          const applyVulturePassive = (bird: BattleBird | null, setBird: React.Dispatch<React.SetStateAction<BattleBird | null>>) => {
               if (bird && bird.id === 'vulture') {
                   const heal = Math.ceil(bird.maxHp * 0.03); 
-                  setBird((prev: BattleBird | null) => prev ? ({ ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + heal) }) : null);
+                  setBird((prev: BattleBird | null) => {
+                      if (!prev || prev.currentHp <= 0) return prev; 
+                      return { ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + heal) };
+                  });
               }
           };
-          applyVulturePassive(playerBirdRef.current, setPlayerBird, 'player');
-          applyVulturePassive(opponentBirdRef.current, setOpponentBird, 'opponent');
+          
+          if (!winnerRef.current && !playerDied && !opponentDied) {
+              applyVulturePassive(playerBirdRef.current, setPlayerBird);
+              applyVulturePassive(opponentBirdRef.current, setOpponentBird);
+          }
       }
+
       if (delta >= 100) {
           const factor = delta/1000;
           const applyEnergyRegen = (bird: BattleBird | null, setBird: React.Dispatch<React.SetStateAction<BattleBird | null>>) => {
@@ -505,7 +568,11 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   
   const handleMove = (move: Move) => {
       if (winner || activeSkillCheck || !playerBird || playerBird.currentEnergy < move.cost) return;
+      
       setPlayerBird(prev => prev ? ({...prev, currentEnergy: prev.currentEnergy - move.cost}) : null);
+      // Increment turn count
+      setPlayerTurnCount(prev => prev + 1);
+      
       triggerCooldown(move.id, move.cooldown);
       if (move.skillCheck && move.skillCheck !== SkillCheckType.NONE) {
           let reflexTargets = undefined;
@@ -612,6 +679,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
             currentZoneProgress={currentZoneProgress}
             requiredRarities={requiredRarities}
             onShowThreatDetails={() => setShowThreatDetails(true)}
+            canFlee={playerTurnCount >= 10 && !winner}
+            onFlee={handleFlee}
        />
 
        {/* Battle Stage */}
@@ -645,8 +714,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                <BattleResultOverlay 
                     winner={resultData.winner}
                     rewards={resultData.rewards}
-                    initialBird={playerBirdInstance}
-                    onContinue={(playAgain) => onBattleComplete(resultData, playAgain)}
+                    initialBird={initialPlayerBird.current}
+                    onContinue={onBattleExit}
                     currentZoneProgress={currentZoneProgress}
                     requiredRarities={requiredRarities}
                     opponentRarity={resultData.opponentRarity}

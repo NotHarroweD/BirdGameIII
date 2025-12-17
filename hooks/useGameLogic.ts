@@ -2,12 +2,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { PlayerState, BirdInstance, BattleResult, GearType, Gear, Rarity, UpgradeState, Gem, ConsumableType, Consumable, Bird, APShopState, UnlocksState, ZoneClearReward, StatType } from '../types';
 import { INITIAL_PLAYER_STATE, XP_TABLE, UPGRADE_COSTS, generateCraftedGear, RARITY_CONFIG, UPGRADE_DEFINITIONS, generateCraftedGem, CONSUMABLE_STATS, rollRarity, BIRD_TEMPLATES, generateBird, ACHIEVEMENTS, AP_SHOP_ITEMS } from '../constants';
-import { loadGame, saveGame, resetGame } from '../utils/persistence';
+import { loadGame, saveGame, resetGame, getLastActiveSlot } from '../utils/persistence';
 
 export const useGameLogic = () => {
-  const [playerState, setPlayerState] = useState<PlayerState>(() => loadGame());
+  const [activeSlot, setActiveSlot] = useState<number>(() => getLastActiveSlot());
+  const [playerState, setPlayerState] = useState<PlayerState>(() => loadGame(getLastActiveSlot()));
 
-  // Helper to determine required rarities for current zone
+  // Ref to track state for saving without triggering re-effects
+  const stateRef = useRef(playerState);
+  useEffect(() => { stateRef.current = playerState; }, [playerState]);
+
+  const loadSlot = (slot: number) => {
+    setActiveSlot(slot);
+    const data = loadGame(slot);
+    setPlayerState(data);
+  };
+
   const getRequiredRarities = (zone: number): Rarity[] => {
       if (zone === 1) return [Rarity.COMMON, Rarity.UNCOMMON];
       if (zone === 2) return [Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE];
@@ -18,12 +28,10 @@ export const useGameLogic = () => {
 
   const RARITY_ORDER = [Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE, Rarity.EPIC, Rarity.LEGENDARY, Rarity.MYTHIC];
 
-  // Calculate Global Boost Multiplier from AP Shop Level
   const getAPBoostMult = (level: number, perLevel = 2) => {
       return 1 + (level * (perLevel / 100));
   };
 
-  // Passive Loop
   useEffect(() => {
     const interval = setInterval(() => {
        setPlayerState(prev => {
@@ -49,7 +57,6 @@ export const useGameLogic = () => {
            const updatedBirds = prev.birds.map(bird => {
                if (prev.huntingBirdIds.includes(bird.instanceId)) {
                    const rarityMult = RARITY_CONFIG[bird.rarity].minMult;
-                   // Updated leveling bonus to 0.5 (50%) per level
                    let baseIncome = (bird.huntingConfig.baseRate * rarityMult) * (1 + (bird.level * 0.5));
                    baseIncome *= multiplier;
 
@@ -73,7 +80,14 @@ export const useGameLogic = () => {
                             
                             if (newXp !== bird.xp || newLevel !== bird.level) {
                                 birdsUpdated = true;
-                                return { ...bird, xp: newXp, level: newLevel, xpToNextLevel: newXpToNext };
+                                const levelsGained = Math.max(0, newLevel - bird.level);
+                                return { 
+                                    ...bird, 
+                                    xp: newXp, 
+                                    level: newLevel, 
+                                    xpToNextLevel: newXpToNext,
+                                    statPoints: (bird.statPoints || 0) + levelsGained
+                                };
                             }
                         }
                    }
@@ -159,17 +173,15 @@ export const useGameLogic = () => {
                    totalScrap: prev.lifetimeStats.totalScrap + extraScrap
                }
            };
-           saveGame(newState);
+           saveGame(newState, activeSlot);
            return newState;
        });
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
-
-  // --- ACTIONS ---
+  }, [activeSlot]);
 
   const handleResetData = () => {
-      resetGame();
+      resetGame(activeSlot);
       setPlayerState(JSON.parse(JSON.stringify(INITIAL_PLAYER_STATE)));
   };
 
@@ -229,10 +241,8 @@ export const useGameLogic = () => {
       });
   };
 
-  // Called when the "Zone Cleared" popup appears to grant rewards AND handle progression immediately
   const handleZoneSuccess = (reward: ZoneClearReward, clearedZoneNumber: number) => {
       setPlayerState(prev => {
-          // Check if this is a new progression (avoid double increment if called multiple times)
           const isProgression = clearedZoneNumber === prev.highestZone;
           const newHighestZone = isProgression ? prev.highestZone + 1 : prev.highestZone;
           
@@ -251,7 +261,7 @@ export const useGameLogic = () => {
               feathers: prev.feathers + reward.feathers,
               scrap: prev.scrap + reward.scrap,
               highestZone: newHighestZone,
-              currentZoneProgress: isProgression ? [] : prev.currentZoneProgress, // Reset progress if advanced
+              currentZoneProgress: isProgression ? [] : prev.currentZoneProgress, 
               inventory: newInventory,
               lifetimeStats: {
                   ...prev.lifetimeStats,
@@ -270,8 +280,6 @@ export const useGameLogic = () => {
       let shouldAdvanceZone = false;
 
       if (result.winner === 'player') {
-          // Only check for zone progression if the selected zone MATCHES the current highest zone.
-          // If handleZoneSuccess already ran, highestZone will be selectedZone + 1, so this block safely skips.
           if (selectedZone === playerState.highestZone) {
               const opponentRarityIdx = RARITY_ORDER.indexOf(result.opponentRarity);
               const required = getRequiredRarities(playerState.highestZone);
@@ -336,7 +344,14 @@ export const useGameLogic = () => {
           }
 
           const updatedBirds = [...prev.birds];
-          updatedBirds[birdIndex] = { ...bird, level: newLevel, xp: newXp, xpToNextLevel: newXpToNext };
+          const levelsGained = Math.max(0, newLevel - bird.level);
+          updatedBirds[birdIndex] = { 
+              ...bird, 
+              level: newLevel, 
+              xp: newXp, 
+              xpToNextLevel: newXpToNext,
+              statPoints: (bird.statPoints || 0) + levelsGained
+          };
           
           const newInventory = { ...prev.inventory };
           if (result.rewards.gem) {
@@ -381,16 +396,21 @@ export const useGameLogic = () => {
           
           const bird = { ...prev.birds[birdIndex] };
           
-          if (stat === 'HP') bird.baseHp += value;
-          else if (stat === 'NRG') bird.baseEnergy += value;
-          else if (stat === 'ATK') bird.baseAttack += value;
-          else if (stat === 'DEF') bird.baseDefense += value;
-          else if (stat === 'SPD') bird.baseSpeed += value;
-          
-          const newBirds = [...prev.birds];
-          newBirds[birdIndex] = bird;
-          
-          return { ...prev, birds: newBirds };
+          if (bird.statPoints > 0) {
+              bird.statPoints -= 1;
+              
+              if (stat === 'HP') bird.baseHp += value;
+              else if (stat === 'NRG') bird.baseEnergy += value;
+              else if (stat === 'ATK') bird.baseAttack += value;
+              else if (stat === 'DEF') bird.baseDefense += value;
+              else if (stat === 'SPD') bird.baseSpeed += value;
+              
+              const newBirds = [...prev.birds];
+              newBirds[birdIndex] = bird;
+              
+              return { ...prev, birds: newBirds };
+          }
+          return prev;
       });
   };
 
@@ -482,10 +502,7 @@ export const useGameLogic = () => {
   const handleTryCraft = (type: GearType): Gear | null => {
       const featherCost = UPGRADE_COSTS.CRAFT_GEAR;
       const scrapCost = UPGRADE_COSTS.CRAFT_SCRAP;
-      
-      // Initial check for immediate feedback (though state setter is the source of truth)
       if (playerState.feathers < featherCost || playerState.scrap < scrapCost) return null;
-
       let success = false;
       setPlayerState(prev => {
           if (prev.feathers < featherCost || prev.scrap < scrapCost) return prev;
@@ -497,7 +514,6 @@ export const useGameLogic = () => {
               lifetimeStats: { ...prev.lifetimeStats, totalCrafts: prev.lifetimeStats.totalCrafts + 1 }
           };
       });
-
       return generateCraftedGear(type, playerState.upgrades.craftRarityLevel);
   };
 
@@ -505,7 +521,6 @@ export const useGameLogic = () => {
       const featherCost = UPGRADE_COSTS.CRAFT_GEM;
       const scrapCost = UPGRADE_COSTS.CRAFT_GEM_SCRAP;
       if (playerState.feathers < featherCost || playerState.scrap < scrapCost) return null;
-
       setPlayerState(prev => {
           if (prev.feathers < featherCost || prev.scrap < scrapCost) return prev;
           return {
@@ -515,7 +530,6 @@ export const useGameLogic = () => {
               lifetimeStats: { ...prev.lifetimeStats, totalCrafts: prev.lifetimeStats.totalCrafts + 1 }
           };
       });
-
       return generateCraftedGem(playerState.upgrades.gemRarityLevel);
   };
 
@@ -531,7 +545,6 @@ export const useGameLogic = () => {
       const config = RARITY_CONFIG[gear.rarity];
       const refundFeathers = Math.floor(UPGRADE_COSTS.CRAFT_GEAR * 0.3);
       const refundScrap = Math.floor(UPGRADE_COSTS.CRAFT_SCRAP * 0.5 * config.minMult);
-
       setPlayerState(prev => {
           const invIndex = prev.inventory.gear.findIndex(g => g.id === gear.id);
           if (invIndex !== -1) {
@@ -571,7 +584,6 @@ export const useGameLogic = () => {
       const config = RARITY_CONFIG[gem.rarity];
       const refundFeathers = Math.floor(UPGRADE_COSTS.CRAFT_GEM * 0.3);
       const refundScrap = Math.floor(UPGRADE_COSTS.CRAFT_GEM_SCRAP * 0.5 * config.minMult);
-
       setPlayerState(prev => {
            const gemIndex = prev.inventory.gems.findIndex(g => g.id === gem.id);
            if (gemIndex !== -1) {
@@ -594,13 +606,11 @@ export const useGameLogic = () => {
           const newGems = prev.inventory.gems.filter(g => !idsToRemove.has(g.id));
           let totalFeathers = 0;
           let totalScrap = 0;
-          
           gemsToSalvage.forEach(gem => {
                const config = RARITY_CONFIG[gem.rarity];
                totalFeathers += Math.floor(UPGRADE_COSTS.CRAFT_GEM * 0.3);
                totalScrap += Math.floor(UPGRADE_COSTS.CRAFT_GEM_SCRAP * 0.5 * config.minMult);
           });
-
           return {
               ...prev,
               inventory: { ...prev.inventory, gems: newGems },
@@ -615,22 +625,17 @@ export const useGameLogic = () => {
           const birdIndex = prev.birds.findIndex(b => b.instanceId === birdId);
           const gearIndex = prev.inventory.gear.findIndex(g => g.id === gearId);
           if (birdIndex === -1 || gearIndex === -1) return prev;
-
           const bird = { ...prev.birds[birdIndex] };
           const gear = prev.inventory.gear[gearIndex];
-          
           const currentGear = gear.type === GearType.BEAK ? bird.gear.beak : bird.gear.claws;
           let newInventory = [...prev.inventory.gear];
           newInventory.splice(gearIndex, 1); 
           if (currentGear) newInventory.push(currentGear); 
-
           const newGearSlots = { ...bird.gear };
           if (gear.type === GearType.BEAK) newGearSlots.beak = gear;
           else newGearSlots.claws = gear;
-
           const updatedBirds = [...prev.birds];
           updatedBirds[birdIndex] = { ...bird, gear: newGearSlots };
-
           return { ...prev, birds: updatedBirds, inventory: { ...prev.inventory, gear: newInventory } };
       });
   };
@@ -639,17 +644,14 @@ export const useGameLogic = () => {
       setPlayerState(prev => {
           const birdIndex = prev.birds.findIndex(b => b.instanceId === birdId);
           if (birdIndex === -1) return prev;
-          
           const bird = { ...prev.birds[birdIndex] };
           const gearToRemove = slot === 'beak' ? bird.gear.beak : bird.gear.claws;
           if (!gearToRemove) return prev;
-
           const updatedBirds = [...prev.birds];
           updatedBirds[birdIndex] = {
               ...bird,
               gear: { ...bird.gear, [slot]: null }
           };
-
           return {
               ...prev,
               birds: updatedBirds,
@@ -664,29 +666,22 @@ export const useGameLogic = () => {
           let targetGear = gearIndex !== -1 ? prev.inventory.gear[gearIndex] : null;
           let birdIndex = -1;
           let gearSlot: 'beak' | 'claws' | null = null;
-
           if (!targetGear) {
               for (let i = 0; i < prev.birds.length; i++) {
                   if (prev.birds[i].gear.beak?.id === gearId) { birdIndex = i; gearSlot = 'beak'; targetGear = prev.birds[i].gear.beak; break; }
                   if (prev.birds[i].gear.claws?.id === gearId) { birdIndex = i; gearSlot = 'claws'; targetGear = prev.birds[i].gear.claws; break; }
               }
           }
-
           if (!targetGear) return prev;
-
           const gemIndex = prev.inventory.gems.findIndex(g => g.id === gemId);
           if (gemIndex === -1) return prev;
           const gem = prev.inventory.gems[gemIndex];
-
           const newGemInventory = [...prev.inventory.gems];
           newGemInventory.splice(gemIndex, 1);
-          
           const newSockets = [...targetGear.sockets];
           if (newSockets[socketIndex]) newGemInventory.push(newSockets[socketIndex]!);
           newSockets[socketIndex] = gem;
-
           const newGear = { ...targetGear, sockets: newSockets };
-          
           if (birdIndex !== -1 && gearSlot) {
               const newBirds = [...prev.birds];
               newBirds[birdIndex] = {
@@ -708,24 +703,19 @@ export const useGameLogic = () => {
           let targetGear = gearIndex !== -1 ? prev.inventory.gear[gearIndex] : null;
           let birdIndex = -1;
           let gearSlot: 'beak' | 'claws' | null = null;
-
           if (!targetGear) {
               for (let i = 0; i < prev.birds.length; i++) {
                   if (prev.birds[i].gear.beak?.id === gearId) { birdIndex = i; gearSlot = 'beak'; targetGear = prev.birds[i].gear.beak; break; }
                   if (prev.birds[i].gear.claws?.id === gearId) { birdIndex = i; gearSlot = 'claws'; targetGear = prev.birds[i].gear.claws; break; }
               }
           }
-
           if (!targetGear) return prev;
           const gem = targetGear.sockets[socketIndex];
           if (!gem) return prev;
-
           const newSockets = [...targetGear.sockets];
           newSockets[socketIndex] = null;
           const newGear = { ...targetGear, sockets: newSockets };
-          
           const newGemInventory = [...prev.inventory.gems, gem];
-
           if (birdIndex !== -1 && gearSlot) {
                const newBirds = [...prev.birds];
                newBirds[birdIndex] = { ...newBirds[birdIndex], gear: { ...newBirds[birdIndex].gear, [gearSlot]: newGear } };
@@ -751,26 +741,21 @@ export const useGameLogic = () => {
           const activeBuffIndex = prev.activeBuffs.findIndex(b => b.type === type);
           const activeBuff = activeBuffIndex !== -1 ? prev.activeBuffs[activeBuffIndex] : null;
           if (activeBuff && activeBuff.rarity !== rarity) return prev;
-
           const invIdx = prev.inventory.consumables.findIndex(c => c.type === type && c.rarity === rarity);
           if (invIdx === -1) return prev;
-          
           const newConsumables = [...prev.inventory.consumables];
           if (newConsumables[invIdx].count > 1) {
               newConsumables[invIdx].count -= 1;
           } else {
               newConsumables.splice(invIdx, 1);
           }
-
           const config = CONSUMABLE_STATS[type].stats[rarity];
           const newActiveBuffs = [...prev.activeBuffs];
-          
           if (activeBuff) {
               newActiveBuffs[activeBuffIndex] = { ...activeBuff, remaining: activeBuff.remaining + config.duration };
           } else {
               newActiveBuffs.push({ type, rarity, multiplier: config.mult, remaining: config.duration });
           }
-
           return {
               ...prev,
               inventory: { ...prev.inventory, consumables: newConsumables },
@@ -784,7 +769,6 @@ export const useGameLogic = () => {
       if (!achievement || !achievement.stages[stageIndex]) return;
       const stageId = `${id}_stage_${stageIndex}`;
       if (playerState.completedAchievementIds.includes(stageId)) return;
-
       const reward = achievement.stages[stageIndex].apReward;
       setPlayerState(prev => ({
           ...prev,
@@ -796,13 +780,10 @@ export const useGameLogic = () => {
   const handleBuyAPUpgrade = (id: keyof APShopState) => {
       const item = AP_SHOP_ITEMS.find(i => i.id === id);
       if (!item) return;
-
       setPlayerState(prev => {
           const currentLevel = prev.apShop[id] || 0;
           const cost = item.baseCost + (currentLevel * item.costScale);
-          // Atomic check prevents negative AP
           if (prev.ap < cost) return prev;
-
           return {
               ...prev,
               ap: prev.ap - cost,
@@ -814,22 +795,15 @@ export const useGameLogic = () => {
   const handleUnlockFeature = (feature: keyof UnlocksState) => {
       let costFeathers = 0;
       let costScrap = 0;
-
       if (feature === 'workshop') { costFeathers = 50; costScrap = 10; } 
       else if (feature === 'clawCrafting') { costFeathers = 100; costScrap = 25; } 
       else if (feature === 'gemCrafting') { costFeathers = 500; costScrap = 100; } 
       else if (feature === 'upgrades') { costFeathers = 1000; costScrap = 200; } 
       else if (feature === 'achievements') { costFeathers = 0; costScrap = 0; }
-
-      // Initial check for immediate UI feedback
       if (playerState.feathers < costFeathers || playerState.scrap < costScrap) return false;
-
       setPlayerState(prev => {
-          // Atomic check inside setter to prevent race conditions causing negative balance
           if (prev.feathers < costFeathers || prev.scrap < costScrap) return prev;
-          // Prevent double unlock
           if (prev.unlocks[feature]) return prev;
-
           const newState = {
               ...prev,
               feathers: prev.feathers - costFeathers,
@@ -848,6 +822,8 @@ export const useGameLogic = () => {
   return {
       playerState,
       setPlayerState,
+      activeSlot,
+      loadSlot,
       actions: {
           handleResetData,
           handleReportCatchStats,

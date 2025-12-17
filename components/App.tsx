@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Hub } from './Hub';
 import { BattleArena } from './BattleArena';
 import { CatchScreen } from './CatchScreen';
@@ -8,8 +8,9 @@ import { GameScreen, HubTab, UpgradeState, Bird, UnlocksState, ZoneClearReward, 
 import { INITIAL_PLAYER_STATE, UPGRADE_COSTS, RARITY_CONFIG, CONSUMABLE_STATS } from '../constants';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './Button';
-import { Lock, Unlock, Database, Hammer, ArrowRight, Beaker, Trash2, AlertTriangle, Swords, Wind, Clock, Award } from 'lucide-react';
+import { Lock, Unlock, Database, Hammer, ArrowRight, Beaker, Trash2, AlertTriangle, Swords, Wind, Clock, Award, Map, Zap, User } from 'lucide-react';
 import { useGameLogic } from '../hooks/useGameLogic';
+import { getSlotPreview, SlotPreview } from '../utils/persistence';
 
 export default function App() {
   const [screen, setScreen] = useState<GameScreen>(GameScreen.MENU);
@@ -22,19 +23,31 @@ export default function App() {
   const resetBtnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Custom Hook
-  const { playerState, setPlayerState, actions } = useGameLogic();
+  const { playerState, setPlayerState, activeSlot, loadSlot, actions } = useGameLogic();
   const [selectedZone, setSelectedZone] = useState<number>(playerState.highestZone);
+  const [previews, setPreviews] = useState<Record<number, SlotPreview | null>>({ 1: null, 2: null });
+
+  // Load previews whenever returning to menu or updating slot
+  useEffect(() => {
+    if (screen === GameScreen.MENU) {
+        setPreviews({
+            1: getSlotPreview(1),
+            2: getSlotPreview(2)
+        });
+    }
+  }, [screen]);
 
   // Sync selected zone if highest zone increases or resets
-  React.useEffect(() => {
-      // If we reset (highestZone < selectedZone), cap it.
+  useEffect(() => {
       if (selectedZone > playerState.highestZone) {
           setSelectedZone(playerState.highestZone);
       }
   }, [playerState.highestZone, selectedZone]);
 
-  const handleStart = () => {
-     if (!playerState.birds || playerState.birds.length === 0) {
+  const handleStart = (slot: number) => {
+     loadSlot(slot);
+     const slotData = getSlotPreview(slot);
+     if (!slotData || slotData.birds.length === 0) {
          setScreen(GameScreen.CATCH); 
      } else {
          setScreen(GameScreen.HUB);
@@ -44,7 +57,8 @@ export default function App() {
   const handleResetData = () => {
       actions.handleResetData();
       setShowResetConfirm(false);
-      setScreen(GameScreen.MENU);
+      // Refresh previews
+      setPreviews(prev => ({ ...prev, [activeSlot]: null }));
   };
 
   const handleTestStart = (bird: Bird, mode: 'god' | 'standard') => {
@@ -53,14 +67,14 @@ export default function App() {
       setScreen(GameScreen.HUB);
   };
 
-  const handleBattleComplete = (result: any, playAgain: boolean = false) => {
+  const handleReportBattleResults = (result: any) => {
       const outcome = actions.handleBattleComplete(result, selectedZone);
-      
       if (outcome.pendingZoneUnlock) {
-          // If we are advancing zone logic via legacy path (backup), we update selection
           setSelectedZone(outcome.pendingZoneUnlock);
       }
-      
+  };
+
+  const handleBattleExit = (playAgain: boolean) => {
       if (playAgain) {
           setBattleKey(prev => prev + 1);
           setScreen(GameScreen.BATTLE);
@@ -98,7 +112,6 @@ export default function App() {
               setInitialHubTab(targetTab);
               setScreen(GameScreen.HUB);
           }
-          // Auto-advance selection when moving to next zone via unlock
           if (unlockModalZone > selectedZone) {
               setSelectedZone(unlockModalZone);
           }
@@ -107,7 +120,6 @@ export default function App() {
       }
   };
 
-  // Keep handling visual resets here or in component
   const handleKeepBird = (bird: any) => {
       actions.handleKeepBird(bird);
       setInitialHubTab(HubTab.ROSTER);
@@ -143,7 +155,6 @@ export default function App() {
 
   const unlockInfo = unlockModalZone ? getUnlockDetails(unlockModalZone) : null;
 
-  // New functions for reset button long-press
   const handleResetDown = () => {
       resetBtnTimerRef.current = setTimeout(() => {
           setShowTestButton(true);
@@ -158,68 +169,133 @@ export default function App() {
       }
   };
 
+  const hasAnySave = previews[1] !== null || previews[2] !== null;
+
   return (
     <div className="bg-slate-900 text-white font-sans overflow-x-hidden relative">
       {screen === GameScreen.MENU && (
-         <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-slate-950 relative overflow-hidden select-none touch-none">
-             {/* ... Menu Content ... */}
-             <div className="relative z-20 flex flex-col items-center justify-between h-full py-20 md:justify-center md:gap-16 w-full max-w-md px-6">
-                 {/* Spacer for Mobile Vertical Balance */}
-                 <div className="flex-1 md:hidden" />
+         <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-slate-950 relative overflow-hidden select-none">
+             {/* Background Particles Decor */}
+             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(6,182,212,0.05)_0%,transparent_70%)] pointer-events-none" />
+             <div className="absolute inset-0 bg-[linear-gradient(rgba(6,182,212,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.02)_1px,transparent_1px)] bg-[length:40px_40px] pointer-events-none" />
 
+             <div className="relative z-20 flex flex-col items-center justify-center w-full max-w-lg px-6 gap-8 md:gap-12">
                  {/* LOGO GROUP */}
                  <div className="flex flex-col items-center justify-center w-full">
-                    {/* Title Container */}
-                    <div className="relative mb-6">
-                         <h1 className="text-7xl md:text-9xl font-tech font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400 text-center leading-[0.8] drop-shadow-2xl">
+                    <div className="relative mb-4 md:mb-6">
+                         <h1 className="text-7xl md:text-8xl font-tech font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400 text-center leading-[0.8] drop-shadow-2xl">
                             BIRD<br/>GAME
                         </h1>
                     </div>
-
-                    {/* Subtitle / Version */}
                     <motion.div 
-                        initial={{ opacity: 0, width: 0 }}
-                        animate={{ opacity: 1, width: 'auto' }}
-                        transition={{ delay: 0.5, duration: 0.5 }}
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
                         className="flex flex-col items-center gap-4 w-full"
                     >
                          <div className="flex items-center gap-4 w-full justify-center opacity-80">
                             <div className="h-[1px] bg-gradient-to-l from-cyan-500/50 to-transparent w-16" />
-                            <span className="font-tech text-3xl md:text-4xl text-cyan-400 font-bold tracking-[0.2em] drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]">III</span>
+                            <span className="font-tech text-3xl text-cyan-400 font-bold tracking-[0.2em] drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]">III</span>
                             <div className="h-[1px] bg-gradient-to-r from-cyan-500/50 to-transparent w-16" />
                          </div>
-
-                         <p className="font-mono text-[10px] md:text-xs text-slate-400 tracking-[0.3em] uppercase">
-                            Tactical Avian Combat
-                         </p>
+                         <p className="font-mono text-[10px] text-slate-400 tracking-[0.3em] uppercase">Tactical Avian Combat</p>
                     </motion.div>
                  </div>
 
-                 <div className="flex-[0.5] md:hidden" />
+                 {/* SAVE SLOTS UI */}
+                 {!hasAnySave ? (
+                    <div className="w-full flex flex-col items-center gap-6">
+                        <Button 
+                            size="xl" 
+                            onClick={() => handleStart(1)} 
+                            className="w-full max-w-[320px] h-20 shadow-[0_0_30px_rgba(6,182,212,0.3)] animate-in fade-in zoom-in duration-700 delay-700"
+                        >
+                            <span className="text-xl tracking-widest flex items-center gap-3">
+                                <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
+                                INITIALIZE
+                                <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
+                            </span>
+                        </Button>
+                        <p className="text-slate-500 text-xs font-mono tracking-widest uppercase opacity-50">System Offline // Create Data Profile</p>
+                    </div>
+                 ) : (
+                    <div className="w-full space-y-4 md:space-y-6 animate-in slide-in-from-bottom-8 duration-500">
+                        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.4em] text-center mb-2">Select Command Profile</div>
+                        
+                        {[1, 2].map(slot => {
+                            const preview = previews[slot];
+                            return (
+                                <motion.div 
+                                    key={slot}
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => handleStart(slot)}
+                                    className={`
+                                        w-full p-4 md:p-5 rounded-xl border-2 cursor-pointer transition-all relative overflow-hidden group
+                                        ${preview ? 'bg-slate-900 border-slate-700 hover:border-cyan-500 hover:shadow-cyan-500/20 shadow-xl' : 'bg-slate-950 border-slate-800 border-dashed hover:border-slate-600'}
+                                    `}
+                                >
+                                    <div className="flex justify-between items-start relative z-10">
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-2 md:mb-3">
+                                                <div className={`w-8 h-8 rounded bg-slate-800 flex items-center justify-center border ${preview ? 'border-cyan-500/30 text-cyan-400' : 'border-slate-700 text-slate-600'}`}>
+                                                    <User size={16} />
+                                                </div>
+                                                <div>
+                                                    <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest leading-none">Slot {slot}</div>
+                                                    <div className={`font-tech text-lg font-bold leading-none ${preview ? 'text-white' : 'text-slate-700 italic'}`}>
+                                                        {preview ? `COMMANDER` : 'EMPTY PROFILE'}
+                                                    </div>
+                                                </div>
+                                            </div>
 
-                 <div className="w-full flex flex-col items-center gap-4 mb-12 md:mb-0">
-                     <motion.button 
-                        onClick={handleStart} 
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        transition={{ delay: 1.2 }}
-                        className="group relative w-full max-w-[280px] h-16 bg-transparent"
-                     >
-                         <svg className="absolute inset-0 w-full h-full text-slate-800 group-hover:text-cyan-900/40 transition-colors duration-300 drop-shadow-[0_0_15px_rgba(6,182,212,0.2)]" viewBox="0 0 280 64" fill="currentColor">
-                             <path d="M20,0 L260,0 L280,20 L280,44 L260,64 L20,64 L0,44 L0,20 Z" fillOpacity="0.8" />
-                             <path d="M20,2 L260,2 L278,20 L278,44 L260,62 L20,62 L2,44 L2,20 Z" fill="none" stroke="rgba(6,182,212,0.5)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-                         </svg>
+                                            {preview && (
+                                                <div className="flex gap-2 flex-wrap mt-3 md:mt-4">
+                                                    {preview.birds.map((b, i) => (
+                                                        <div key={i} className={`flex items-center gap-1.5 px-2 py-1 bg-slate-950 rounded border ${RARITY_CONFIG[b.rarity].borderColor} group-hover:scale-105 transition-transform`}>
+                                                            <div className={`w-1.5 h-1.5 rounded-full ${RARITY_CONFIG[b.rarity].color.replace('text-', 'bg-')}`} />
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[9px] font-black uppercase leading-none text-white">{b.species.split(' ')[0]}</span>
+                                                                <span className="text-[8px] font-mono text-slate-500 leading-none">LVL {b.level}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
 
-                         <span className="relative z-10 font-tech font-black text-xl tracking-[0.15em] text-white group-hover:text-cyan-200 transition-colors flex items-center justify-center gap-3">
-                             <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
-                             {playerState.birds && playerState.birds.length > 0 ? "RESUME MISSION" : "INITIALIZE"}
-                             <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
-                         </span>
-                     </motion.button>
+                                        <div className="text-right">
+                                            {preview ? (
+                                                <>
+                                                    <div className="text-[10px] text-slate-500 font-bold uppercase mb-1">Status</div>
+                                                    <div className="font-mono text-emerald-400 text-xs font-bold bg-emerald-950/30 px-2 py-1 rounded border border-emerald-900/50">ONLINE</div>
+                                                    <div className="mt-3 md:mt-4 flex flex-col items-end gap-1">
+                                                        <div className="flex items-center gap-1.5 text-cyan-500">
+                                                            <Database size={10} /> <span className="text-[10px] font-mono font-bold">{preview.feathers.toLocaleString()}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 text-rose-500">
+                                                            <Map size={10} /> <span className="text-[10px] font-mono font-bold">Z-{preview.highestZone}</span>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="bg-slate-900 group-hover:bg-cyan-900/30 text-slate-700 group-hover:text-cyan-400 text-[10px] font-black tracking-widest p-2 rounded-lg transition-colors border border-slate-800 group-hover:border-cyan-500/50 mt-1">
+                                                    NEW START
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {/* Slot Background Decoration */}
+                                    {preview && (
+                                        <div className="absolute -bottom-4 -right-4 opacity-5 pointer-events-none group-hover:opacity-10 transition-opacity">
+                                            <Zap size={100} />
+                                        </div>
+                                    )}
+                                </motion.div>
+                            );
+                        })}
+                    </div>
+                 )}
 
-                     {/* Hidden Test Deploy Button */}
+                 <div className="w-full flex flex-col items-center gap-4">
                      <AnimatePresence>
                          {showTestButton && (
                              <motion.button 
@@ -234,7 +310,6 @@ export default function App() {
                          )}
                      </AnimatePresence>
 
-                     {/* Reset Data Button with Long Press */}
                      <motion.button 
                         onClick={() => setShowResetConfirm(true)}
                         onPointerDown={handleResetDown}
@@ -243,9 +318,9 @@ export default function App() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 1.6 }}
-                        className="text-slate-700 text-[10px] font-mono uppercase tracking-widest hover:text-rose-500 transition-colors flex items-center gap-2 mt-4 select-none"
+                        className="text-slate-800 text-[10px] font-mono uppercase tracking-[0.2em] hover:text-rose-700 transition-colors flex items-center gap-2 mt-2 select-none"
                      >
-                         <Trash2 size={10} /> RESET SYSTEM DATA
+                         <Trash2 size={10} /> {hasAnySave ? "ERASE ACTIVE SLOT" : "PURGE SYSTEM CACHE"}
                      </motion.button>
                  </div>
              </div>
@@ -264,9 +339,9 @@ export default function App() {
                     className="bg-slate-900 border-2 border-rose-900 p-8 rounded-2xl max-w-sm w-full text-center shadow-2xl"
                   >
                       <AlertTriangle size={48} className="text-rose-500 mx-auto mb-4" />
-                      <h3 className="text-2xl font-tech text-white mb-2 uppercase">FACTORY RESET?</h3>
-                      <p className="text-slate-400 text-sm mb-6">
-                          This will wipe all progress, birds, and items. This action cannot be undone.
+                      <h3 className="text-2xl font-tech text-white mb-2 uppercase">TERMINATE DATA?</h3>
+                      <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+                          This will permanently wipe all progress for <strong className="text-white">SLOT {activeSlot}</strong>. This operation is irreversible.
                       </p>
                       <div className="flex flex-col gap-3">
                           <Button fullWidth variant="danger" onClick={handleResetData}>CONFIRM WIPE</Button>
@@ -307,19 +382,20 @@ export default function App() {
             onClaimAchievement={actions.handleClaimAchievement}
             onBuyAPUpgrade={actions.handleBuyAPUpgrade}
             onUnlockFeature={handleUnlockFeature}
+            onApplyLevelUpReward={actions.handleApplyLevelUpReward}
             currentZone={selectedZone}
             onSelectZone={setSelectedZone}
           />
       )}
 
-      {/* Battle and Catch Screens */}
       {screen === GameScreen.BATTLE && (
           <BattleArena 
             key={battleKey}
             playerBirdInstance={playerState.birds.find(b => b.instanceId === playerState.selectedBirdId)!}
             enemyLevel={selectedZone}
             highestZone={playerState.highestZone}
-            onBattleComplete={handleBattleComplete}
+            onReportResults={handleReportBattleResults}
+            onBattleExit={handleBattleExit}
             onZoneCleared={handleZoneCleared}
             onApplyLevelUpReward={actions.handleApplyLevelUpReward}
             activeBuffs={playerState.activeBuffs}
@@ -341,7 +417,6 @@ export default function App() {
           />
       )}
 
-      {/* Unlock / Zone Clear Modal */}
       <AnimatePresence>
           {unlockModalZone && (
               <motion.div 

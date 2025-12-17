@@ -175,6 +175,7 @@ export interface BirdInstance extends Bird {
   level: number;
   xp: number;
   xpToNextLevel: number;
+  statPoints: number;
   kills: number;
   prestigeLevel: number;
   gear: {
@@ -358,6 +359,7 @@ export interface HubProps {
   onClaimAchievement: (id: string, stageIndex: number) => void;
   onBuyAPUpgrade: (id: keyof APShopState) => void;
   onUnlockFeature: (feature: keyof UnlocksState) => void;
+  onApplyLevelUpReward: (birdId: string, stat: StatType, value: number) => void;
   currentZone: number;
   onSelectZone: (zone: number) => void;
 }

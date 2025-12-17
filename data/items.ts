@@ -125,36 +125,41 @@ export const getMaxCraftRarity = (level: number): Rarity => {
     return RARITY_HIERARCHY[totalIndex];
 };
 
+/**
+ * Enhanced Rarity Rolling Logic
+ * Uses a base 0-1000 roll. 
+ * Upgrade levels provide a flat bonus, pushing the distribution upwards.
+ */
 export const rollRarity = (upgradeLevel: number = 0, context: 'CATCH' | 'CRAFT' = 'CRAFT', multiplier: number = 1): Rarity => {
-  // Base roll is 0-800.
-  const baseRoll = Math.random() * 800;
+  // Consistent base roll 0-1000
+  const baseRoll = Math.random() * 1000;
   
-  // Level Bonus: Adjusted scaling to prevent Mythic floods at high levels.
-  // Was 10 per level, now 2.5 per level.
-  const levelBonus = upgradeLevel * 2.5;
+  // Strong level bonus for crafting progression. 
+  // At Level 10 (Purple unlocked), bonus is 200, allowing access to Epic tier (950+).
+  // At Level 20 (Mythic unlocked), bonus is 400, allowing access to Mythic tier (1300+).
+  const levelBonus = upgradeLevel * 20;
 
   let multiplierBonus = 0;
-  
-  // Catch Multiplier Logic 
   if (context === 'CATCH') {
-      if (multiplier >= 2) multiplierBonus += 20;
-      if (multiplier >= 3) multiplierBonus += 40;
-      if (multiplier >= 4) multiplierBonus += 100; 
-      if (multiplier >= 5) multiplierBonus += 250; 
+      if (multiplier >= 2) multiplierBonus += 50;
+      if (multiplier >= 3) multiplierBonus += 120;
+      if (multiplier >= 4) multiplierBonus += 300; 
+      if (multiplier >= 5) multiplierBonus += 550; 
   }
 
   const totalScore = baseRoll + levelBonus + multiplierBonus;
 
-  // Score Thresholds
+  // Refined Thresholds based on a ~1000-1400 possible range at endgame
   let rarity = Rarity.COMMON;
   
-  if (totalScore > 1600) rarity = Rarity.MYTHIC;
-  else if (totalScore > 1350) rarity = Rarity.LEGENDARY;
-  else if (totalScore > 1100) rarity = Rarity.EPIC;
-  else if (totalScore > 850) rarity = Rarity.RARE;
-  else if (totalScore > 550) rarity = Rarity.UNCOMMON;
+  if (totalScore > 1300) rarity = Rarity.MYTHIC;
+  else if (totalScore > 1150) rarity = Rarity.LEGENDARY;
+  else if (totalScore > 950) rarity = Rarity.EPIC;
+  else if (totalScore > 700) rarity = Rarity.RARE;
+  else if (totalScore > 400) rarity = Rarity.UNCOMMON;
 
   // Hard Gating for CRAFTING only
+  // If player rolls higher than their facility allows, they get the maximum allowed tier instead.
   if (context === 'CRAFT') {
       const maxAllowed = getMaxCraftRarity(upgradeLevel);
       const currentIdx = RARITY_HIERARCHY.indexOf(rarity);
@@ -181,41 +186,37 @@ const INDEX_TO_RARITY = [Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE, Rarity.EPI
 
 // --- STAT BONUSES FOR GEAR ---
 const STAT_BONUS_RANGES = {
-    [Rarity.COMMON]: { min: 2, max: 5 },
-    [Rarity.UNCOMMON]: { min: 5, max: 10 },
-    [Rarity.RARE]: { min: 10, max: 20 },
-    [Rarity.EPIC]: { min: 20, max: 35 },
-    [Rarity.LEGENDARY]: { min: 35, max: 50 },
-    [Rarity.MYTHIC]: { min: 50, max: 75 }
+    [Rarity.COMMON]: { min: 5, max: 10 },
+    [Rarity.UNCOMMON]: { min: 10, max: 20 },
+    [Rarity.RARE]: { min: 20, max: 35 },
+    [Rarity.EPIC]: { min: 35, max: 55 },
+    [Rarity.LEGENDARY]: { min: 55, max: 80 },
+    [Rarity.MYTHIC]: { min: 80, max: 120 }
 };
 const STAT_TYPES: StatType[] = ['HP', 'ATK', 'DEF', 'SPD', 'NRG'];
 
 const generateStatBonuses = (itemRarity: Rarity, boostLevel: number = 0): StatBonus[] => {
-    const maxBonuses = RARITY_INDEX[itemRarity];
+    const maxIndex = RARITY_INDEX[itemRarity];
     const bonuses: StatBonus[] = [];
     
-    if (maxBonuses === 0) return [];
+    if (maxIndex === undefined) return [];
     
-    // Scale number of bonuses based on rarity (similar to sockets/buffs)
-    const numBonuses = Math.min(3, Math.floor(Math.random() * maxBonuses) + 1);
+    const numBonuses = Math.min(3, Math.floor(Math.random() * (maxIndex + 1) / 2) + 1);
 
     for (let i = 0; i < numBonuses; i++) {
-        // Boost level helps getting better bonuses relative to the item's potential
-        const itemIndex = RARITY_INDEX[itemRarity];
-        let bonusRarityIndex = itemIndex;
-        
-        const dropChance = Math.max(0, 0.5 - (boostLevel * 0.05));
-        
-        if (Math.random() < dropChance) {
-            bonusRarityIndex = Math.max(0, itemIndex - 1);
+        const roll = Math.random();
+        let bonusRarityIndex = maxIndex;
+
+        if (maxIndex > 0) {
+            if (roll < 0.2) bonusRarityIndex = Math.max(0, maxIndex - 2); 
+            else if (roll < 0.5) bonusRarityIndex = Math.max(0, maxIndex - 1); 
         }
         
         const bonusRarity = INDEX_TO_RARITY[bonusRarityIndex];
-        
         const statType = STAT_TYPES[Math.floor(Math.random() * STAT_TYPES.length)];
         const range = STAT_BONUS_RANGES[bonusRarity];
         
-        const rollPercent = Math.random() + (boostLevel * 0.02); 
+        const rollPercent = Math.random() + (boostLevel * 0.01); 
         const value = Math.floor(range.min + (Math.min(1, rollPercent) * (range.max - range.min)));
         
         bonuses.push({
@@ -237,7 +238,6 @@ const UTILITY_BUFF_RANGES = {
     [Rarity.MYTHIC]: { min: 50, max: 75 }
 };
 
-// Separate small range for rare chance buffs (Diamonds, Gems)
 const RARE_UTILITY_BUFF_RANGES = {
     [Rarity.COMMON]: { min: 0.5, max: 1.5 },
     [Rarity.UNCOMMON]: { min: 1.5, max: 3.0 },
@@ -249,26 +249,19 @@ const RARE_UTILITY_BUFF_RANGES = {
 
 const UTILITY_BUFF_TYPES: UtilityBuffType[] = ['XP_BONUS', 'SCRAP_BONUS', 'HUNT_BONUS', 'FEATHER_BONUS', 'DIAMOND_BATTLE_CHANCE', 'DIAMOND_HUNT_CHANCE', 'GEM_FIND_CHANCE', 'ITEM_FIND_CHANCE'];
 
-// Used for GEMS
 export const generateGemBuffs = (itemRarity: Rarity, boostLevel: number = 0): GearBuff[] => {
     const maxBuffs = Math.max(1, Math.min(2, Math.floor(RARITY_INDEX[itemRarity] / 2) + 1)); 
     const buffs: GearBuff[] = [];
-    
-    // Scale Gem strength with boost level (similar to Gear stats)
-    // 2% increase per level to keep percentages reasonable
     const levelMult = 1 + (boostLevel * 0.02); 
 
     for (let i = 0; i < maxBuffs; i++) {
         const buffRarityIndex = Math.max(0, RARITY_INDEX[itemRarity] - Math.floor(Math.random() * 2));
         const buffRarity = INDEX_TO_RARITY[buffRarityIndex];
-        
         const statType = UTILITY_BUFF_TYPES[Math.floor(Math.random() * UTILITY_BUFF_TYPES.length)];
         
         const isRareType = statType === 'DIAMOND_BATTLE_CHANCE' || statType === 'DIAMOND_HUNT_CHANCE' || statType === 'GEM_FIND_CHANCE' || statType === 'ITEM_FIND_CHANCE';
         const range = isRareType ? RARE_UTILITY_BUFF_RANGES[buffRarity] : UTILITY_BUFF_RANGES[buffRarity];
-        
         const rawValue = (range.min + Math.random() * (range.max - range.min)) * levelMult;
-        
         const value = isRareType ? Number(rawValue.toFixed(1)) : Math.floor(rawValue);
         
         buffs.push({
@@ -277,7 +270,6 @@ export const generateGemBuffs = (itemRarity: Rarity, boostLevel: number = 0): Ge
             rarity: buffRarity
         });
     }
-
     return buffs;
 };
 
@@ -292,12 +284,10 @@ export const generateGem = (rarity: Rarity, boostLevel: number = 0): Gem => {
 };
 
 export const generateCraftedGem = (boostLevel = 0): Gem => {
-    // Crafting uses upgrade level to determine rarity
     const rarity = rollRarity(boostLevel, 'CRAFT', 1);
     return generateGem(rarity, boostLevel);
 };
 
-// Socket Logic
 const generateSockets = (itemRarity: Rarity): (Gem | null)[] => {
     let maxSockets = 0;
     switch (itemRarity) {
@@ -310,42 +300,32 @@ const generateSockets = (itemRarity: Rarity): (Gem | null)[] => {
         default: maxSockets = 0;
     }
 
-    // Chance to have sockets if eligible
     const roll = Math.random();
     let numSockets = 0;
     if (maxSockets > 0) {
-        if (roll < 0.4) numSockets = maxSockets; // 40% chance for full sockets
-        else if (roll < 0.8) numSockets = Math.max(1, maxSockets - 1); // 40% chance for almost full
-        else numSockets = 0; // 20% chance for none
+        if (roll < 0.4) numSockets = maxSockets; 
+        else if (roll < 0.8) numSockets = Math.max(1, maxSockets - 1); 
+        else numSockets = 0; 
     }
 
     return new Array(numSockets).fill(null);
 };
 
-// Prefix Logic
 const generatePrefix = (rarity: Rarity): { prefix?: GearPrefix, value?: number } => {
-    // 40% chance to have a prefix
     if (Math.random() > 0.4) return {};
 
     const prefixes = [GearPrefix.QUALITY, GearPrefix.SHARP, GearPrefix.GREAT];
     const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
     let value = 0;
 
-    // Scaling value based on rarity - REDUCED significantly for balance (was 1 + rarity * 0.5)
-    // New: 1 + rarity * 0.4, but smaller base values below.
     const rarityIdx = RARITY_INDEX[rarity];
     const tierMult = 1 + (rarityIdx * 0.4); 
 
     if (prefix === GearPrefix.QUALITY) {
-        // Flat Attack Boost - Modest boost
         value = Math.floor((2 + Math.random() * 3) * tierMult);
     } else if (prefix === GearPrefix.SHARP) {
-        // Bleed Damage % - Reduced base from 15 to 5.
-        // Range: ~5-10% Common -> ~15-30% Mythic
         value = Math.floor((5 + Math.random() * 5) * tierMult);
     } else if (prefix === GearPrefix.GREAT) {
-        // Crit Chance % - Reduced base from 15 to 5.
-        // Range: ~5-10% Common -> ~15-30% Mythic
         value = Math.floor((5 + Math.random() * 5) * tierMult);
     }
 
@@ -362,17 +342,11 @@ const getPrefixName = (prefix: GearPrefix) => {
 };
 
 export const generateCraftedGear = (type: GearType, boostLevel = 0): Gear => {
-    // Using CRAFT context, multiplier is irrelevant (1)
     const rarity = rollRarity(boostLevel, 'CRAFT', 1);
     const config = RARITY_CONFIG[rarity];
     const mult = config.minMult + Math.random() * (config.maxMult - config.minMult);
-
-    // Scaling base stats with boostLevel (Forge Level)
-    // Increased from 0.1 to 0.15 per level
     const levelMult = 1 + (boostLevel * 0.15); 
-
     const baseAtk = (type === GearType.BEAK ? 10 : 5) * levelMult;
-    
     const { prefix, value } = generatePrefix(rarity);
     const prefixStr = prefix ? getPrefixName(prefix) + ' ' : '';
 

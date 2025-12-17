@@ -167,6 +167,8 @@ export const LabView: React.FC<LabViewProps> = ({
       </div>
   );
 
+  const isZone3Reached = playerState.highestZone >= 3;
+
   return (
     <div className="space-y-6 pb-20 relative animate-in fade-in duration-500">
       
@@ -226,7 +228,7 @@ export const LabView: React.FC<LabViewProps> = ({
                                 </div>
                             </button>
 
-                            {/* Claw Crafting - Requires Unlock */}
+                            {/* Claw Crafting - Requires Unlock and Zone 3 */}
                             {playerState.unlocks.clawCrafting ? (
                                 <button 
                                     onClick={() => handleCraftClick(GearType.CLAWS)}
@@ -245,12 +247,16 @@ export const LabView: React.FC<LabViewProps> = ({
                             ) : (
                                 <button 
                                     onClick={() => onUnlockFeature('clawCrafting')}
-                                    disabled={playerState.feathers < 100 || playerState.scrap < 25}
-                                    className="bg-slate-900/50 p-4 rounded border border-dashed border-slate-800 hover:border-slate-600 transition-all flex flex-col items-center gap-2 group opacity-70"
+                                    disabled={playerState.feathers < 100 || playerState.scrap < 25 || !isZone3Reached}
+                                    className="bg-slate-900/50 p-4 rounded border border-dashed border-slate-800 hover:border-slate-600 transition-all flex flex-col items-center gap-2 group opacity-70 disabled:cursor-not-allowed"
                                 >
                                     <Lock size={20} className="text-slate-600" />
-                                    <div className="text-xs font-bold text-slate-500">UNLOCK CLAWS</div>
-                                    <div className="text-[10px] text-slate-600">100 F / 25 S</div>
+                                    <div className="text-xs font-bold text-slate-500">
+                                        {!isZone3Reached ? "LOCKED (ZONE 3)" : "UNLOCK CLAWS"}
+                                    </div>
+                                    <div className="text-[10px] text-slate-600">
+                                        {!isZone3Reached ? "Clear Zone 2" : "100 F / 25 S"}
+                                    </div>
                                 </button>
                             )}
                         </div>

@@ -39,7 +39,6 @@ const LootItem: React.FC<{
                 </>
             )}
 
-            {/* Animated Background Shine */}
             <motion.div 
                 animate={{ x: ['-100%', '200%'] }}
                 transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 3, ease: "linear", delay: delay + 0.5 }}
@@ -47,7 +46,6 @@ const LootItem: React.FC<{
             />
 
             <div className="relative">
-                {/* Type specific background glow animation */}
                 <motion.div 
                     animate={type === 'gem' ? { rotate: 360 } : type === 'diamond' ? { scale: [1, 1.2, 1] } : {}}
                     transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
@@ -86,7 +84,6 @@ const ZoneProgress: React.FC<{
         <div className="flex items-center gap-1">
             {required.map((rarity, index) => {
                 const isCollected = progress.includes(rarity);
-                // Check if this specific instance is fulfilling a new rarity requirement
                 const isNewUnlock = isVictory && currentOpponentRarity === rarity && !isCollected;
                 const config = RARITY_CONFIG[rarity];
                 
@@ -100,11 +97,6 @@ const ZoneProgress: React.FC<{
                             } ${isNewUnlock ? 'animate-pulse shadow-[0_0_10px_white]' : ''}`}
                             title={config.name}
                         />
-                        {(isCollected || isNewUnlock) && (
-                            <div className={`absolute inset-0 flex items-center justify-center -rotate-45`}>
-                                {/* Checkmark or Effect */}
-                            </div>
-                        )}
                     </div>
                 );
             })}
@@ -127,20 +119,18 @@ export const BattleResultOverlay: React.FC<{
     
     const isVictory = winner === 'player';
     
-    // Animation States
     const [displayFeathers, setDisplayFeathers] = useState(0);
     const [displayScrap, setDisplayScrap] = useState(0);
     const [displayXp, setDisplayXp] = useState(0);
+    const [displayCurrentXp, setDisplayCurrentXp] = useState(initialBird.xp);
     const [xpBarWidth, setXpBarWidth] = useState(0);
     const [showLoot, setShowLoot] = useState(false);
     const [showButtons, setShowButtons] = useState(false);
 
-    // Level Up Reward State
     const [showLevelUpRewards, setShowLevelUpRewards] = useState(false);
     const [rewardOptions, setRewardOptions] = useState<{stat: StatType, value: number, label: string, rarity: Rarity}[]>([]);
     const [rewardsClaimed, setRewardsClaimed] = useState(false);
 
-    // Calculate final level
     const finalLevel = React.useMemo(() => {
         if (!isVictory) return initialBird.level;
         let lvl = initialBird.level;
@@ -156,7 +146,6 @@ export const BattleResultOverlay: React.FC<{
 
     const isLevelUp = finalLevel > initialBird.level;
 
-    // Generate Rewards Effect
     useEffect(() => {
         if (isLevelUp && !rewardsClaimed) {
             const generateOptions = () => {
@@ -166,25 +155,34 @@ export const BattleResultOverlay: React.FC<{
                 for(let i=0; i<3; i++) {
                     const stat = stats[Math.floor(Math.random() * stats.length)];
                     
-                    // Roll Rarity for the Upgrade
                     const roll = Math.random();
                     let upgradeRarity = Rarity.COMMON;
-                    if (roll < 0.15) upgradeRarity = Rarity.RARE; // 15% Chance for Blue
-                    else if (roll < 0.50) upgradeRarity = Rarity.UNCOMMON; // 35% Chance for Green
+                    
+                    if (roll < 0.001) upgradeRarity = Rarity.MYTHIC;      
+                    else if (roll < 0.005) upgradeRarity = Rarity.LEGENDARY; 
+                    else if (roll < 0.025) upgradeRarity = Rarity.EPIC;      
+                    else if (roll < 0.105) upgradeRarity = Rarity.RARE;      
+                    else if (roll < 0.355) upgradeRarity = Rarity.UNCOMMON;  
                     
                     let min = 1;
-                    let max = 2;
+                    let max = 1;
 
                     if (stat === 'HP' || stat === 'NRG') {
-                        // Pool Stats (HP/NRG)
-                        if (upgradeRarity === Rarity.COMMON) { min = 5; max = 15; }
-                        else if (upgradeRarity === Rarity.UNCOMMON) { min = 15; max = 25; }
-                        else if (upgradeRarity === Rarity.RARE) { min = 25; max = 40; }
+                        // Strictly Increasing Ranges - Matches tuned RosterView
+                        if (upgradeRarity === Rarity.COMMON) { min = 5; max = 8; }
+                        else if (upgradeRarity === Rarity.UNCOMMON) { min = 9; max = 15; }
+                        else if (upgradeRarity === Rarity.RARE) { min = 16; max = 25; }
+                        else if (upgradeRarity === Rarity.EPIC) { min = 26; max = 40; }
+                        else if (upgradeRarity === Rarity.LEGENDARY) { min = 41; max = 60; }
+                        else if (upgradeRarity === Rarity.MYTHIC) { min = 61; max = 85; }
                     } else {
-                        // Combat Stats (ATK/DEF/SPD)
-                        if (upgradeRarity === Rarity.COMMON) { min = 1; max = 2; }
-                        else if (upgradeRarity === Rarity.UNCOMMON) { min = 2; max = 4; }
-                        else if (upgradeRarity === Rarity.RARE) { min = 4; max = 6; }
+                        // Strictly Increasing Ranges - Matches tuned RosterView
+                        if (upgradeRarity === Rarity.COMMON) { min = 1; max = 1; }
+                        else if (upgradeRarity === Rarity.UNCOMMON) { min = 2; max = 2; }
+                        else if (upgradeRarity === Rarity.RARE) { min = 3; max = 3; }
+                        else if (upgradeRarity === Rarity.EPIC) { min = 4; max = 5; }
+                        else if (upgradeRarity === Rarity.LEGENDARY) { min = 6; max = 7; }
+                        else if (upgradeRarity === Rarity.MYTHIC) { min = 8; max = 10; }
                     }
                     
                     const val = Math.floor(min + Math.random() * (max - min + 1));
@@ -196,7 +194,7 @@ export const BattleResultOverlay: React.FC<{
             };
             generateOptions();
         }
-    }, [finalLevel, initialBird.level, rewardsClaimed, initialBird.rarity, isLevelUp]);
+    }, [finalLevel, initialBird.level, rewardsClaimed, isLevelUp]);
 
     const handleLevelUpClick = () => {
         if (rewardsClaimed) return;
@@ -211,7 +209,6 @@ export const BattleResultOverlay: React.FC<{
         setShowLevelUpRewards(false);
     };
 
-    // Calculate if zone cleared - if the last required rarity is collected
     const isZoneCleared = React.useMemo(() => {
         if (!isVictory || !isHighestZone) return false;
         const newProgress = new Set(currentZoneProgress);
@@ -225,17 +222,19 @@ export const BattleResultOverlay: React.FC<{
             return;
         }
 
-        // Reduced delay to let the Victory Title slam in
-        const countDelay = 400; 
+        const countDelay = 1000; 
         
-        const startXpPercent = (initialBird.xp / initialBird.xpToNextLevel) * 100;
-        const endXpPercent = Math.min(100, ((initialBird.xp + rewards.xp) / initialBird.xpToNextLevel) * 100);
+        const startXP = initialBird.xp;
+        const endXP = initialBird.xp + rewards.xp;
+        const maxXP = initialBird.xpToNextLevel;
         
-        setXpBarWidth(startXpPercent);
+        const initialPercent = Math.min(100, (startXP / maxXP) * 100);
+        setXpBarWidth(initialPercent);
+        setDisplayCurrentXp(startXP);
 
         let animationFrameId: number;
         let startTime: number;
-        const duration = 800; // Faster counting (800ms vs 1500ms)
+        const duration = 1500; 
 
         const startCounting = () => {
             startTime = Date.now();
@@ -243,21 +242,23 @@ export const BattleResultOverlay: React.FC<{
                 const now = Date.now();
                 const elapsed = now - startTime;
                 const progress = Math.min(1, elapsed / duration);
-                
-                // Exponential ease out for "rolling to a stop" feel
                 const ease = 1 - Math.pow(1 - progress, 3);
 
                 setDisplayFeathers(Math.floor(rewards.feathers * ease));
                 setDisplayScrap(Math.floor(rewards.scrap * ease));
                 setDisplayXp(Math.floor(rewards.xp * ease));
-                setXpBarWidth(startXpPercent + ((endXpPercent - startXpPercent) * ease));
+                
+                const currentAnimatedXp = startXP + ((endXP - startXP) * ease);
+                setDisplayCurrentXp(currentAnimatedXp);
+                
+                const percent = Math.min(100, (currentAnimatedXp / maxXP) * 100);
+                setXpBarWidth(percent);
 
                 if (progress < 1) {
                     animationFrameId = requestAnimationFrame(animate);
                 } else {
-                    // Finished counting
                     setShowLoot(true);
-                    setTimeout(() => setShowButtons(true), 300); // Buttons appear much quicker after loot
+                    setTimeout(() => setShowButtons(true), 300);
                 }
             };
             animationFrameId = requestAnimationFrame(animate);
@@ -277,7 +278,6 @@ export const BattleResultOverlay: React.FC<{
     const isSpecialGem = enemyPrefix === EnemyPrefix.GEMFINDER;
     const isSpecialItem = enemyPrefix === EnemyPrefix.HOARDER;
 
-    // Helper for Stat Comparison
     const calculateYield = (bird: BirdInstance, level: number) => {
         const rarityConfig = RARITY_CONFIG[bird.rarity];
         return (bird.huntingConfig.baseRate * rarityConfig.minMult) * (1 + level * 0.5);
@@ -308,23 +308,6 @@ export const BattleResultOverlay: React.FC<{
         </div>
     );
 
-    // Mapping for projection logic
-    const baseKeyMap: Record<StatType, keyof BirdInstance> = {
-        'HP': 'baseHp',
-        'ATK': 'baseAttack',
-        'DEF': 'baseDefense',
-        'SPD': 'baseSpeed',
-        'NRG': 'baseEnergy'
-    };
-
-    const statKeyMap: Record<StatType, 'maxHp' | 'attack' | 'defense' | 'speed' | 'maxEnergy'> = {
-        'HP': 'maxHp',
-        'ATK': 'attack',
-        'DEF': 'defense',
-        'SPD': 'speed',
-        'NRG': 'maxEnergy'
-    };
-
     return (
         <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -336,10 +319,8 @@ export const BattleResultOverlay: React.FC<{
                 transition={{ type: "spring", duration: 0.5, bounce: 0.3 }}
                 className={`w-full max-w-sm bg-slate-900 border-2 p-1 rounded-2xl relative overflow-hidden flex flex-col items-center shadow-2xl max-h-[90vh] ${isVictory ? 'border-cyan-500 shadow-cyan-500/30' : 'border-rose-500 shadow-rose-500/30'}`}
             >
-                {/* Content Container */}
                 <div className="bg-slate-950/80 w-full h-full rounded-xl p-5 flex flex-col items-center gap-4 relative overflow-y-auto">
                     
-                    {/* Animated Background Rays */}
                     {isVictory && (
                         <div className="absolute inset-0 pointer-events-none overflow-hidden">
                             <motion.div 
@@ -378,10 +359,8 @@ export const BattleResultOverlay: React.FC<{
                         </motion.div>
                     </div>
 
-                    {/* Rewards */}
                     {isVictory && (
                         <div className="w-full space-y-3 relative z-10">
-                            {/* XP Bar */}
                             <motion.div 
                                 initial={{ scaleX: 0, opacity: 0 }}
                                 animate={{ scaleX: 1, opacity: 1 }}
@@ -400,7 +379,6 @@ export const BattleResultOverlay: React.FC<{
                                         +{displayXp}
                                     </motion.div>
                                 </div>
-                                {/* Bar Container */}
                                 <div className="h-3 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-700/50 relative z-10">
                                     <motion.div 
                                         className={`h-full relative ${isSpecialXp ? 'bg-gradient-to-r from-cyan-600 to-cyan-300' : 'bg-gradient-to-r from-yellow-600 to-yellow-300'}`}
@@ -408,6 +386,9 @@ export const BattleResultOverlay: React.FC<{
                                     >
                                         <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.2)_50%,transparent_75%)] bg-[length:10px_10px]" />
                                     </motion.div>
+                                    <div className="absolute inset-0 flex items-center justify-center text-[8px] font-mono font-bold text-white drop-shadow-md z-10">
+                                        {Math.floor(displayCurrentXp)} / {initialBird.xpToNextLevel} XP
+                                    </div>
                                 </div>
                                 {(xpBarWidth >= 100 || isLevelUp) && (
                                     <motion.button
@@ -469,7 +450,6 @@ export const BattleResultOverlay: React.FC<{
                                  </motion.div>
                             </div>
 
-                            {/* Drop Sequence Container */}
                             <div className="space-y-3 min-h-[80px] py-2">
                                 <AnimatePresence>
                                     {showLoot && (
@@ -522,7 +502,6 @@ export const BattleResultOverlay: React.FC<{
                                 </AnimatePresence>
                             </div>
                             
-                            {/* Zone Progress - Only show if current zone matches highest unlocked zone */}
                             <motion.div 
                                 initial={{ opacity: 0, y: 20 }} 
                                 animate={{ opacity: 1, y: 0 }} 
@@ -571,7 +550,6 @@ export const BattleResultOverlay: React.FC<{
                 </div>
             </motion.div>
 
-            {/* Level Up Rewards Modal */}
             <AnimatePresence>
                 {showLevelUpRewards && (
                     <motion.div 
@@ -625,7 +603,6 @@ export const BattleResultOverlay: React.FC<{
                                     if (opt.stat === 'DEF') Icon = Shield;
                                     if (opt.stat === 'SPD') Icon = Wind;
                                     
-                                    // Calculate Projected Stats
                                     const baseKeyMap: Record<StatType, keyof BirdInstance> = {
                                         'HP': 'baseHp',
                                         'ATK': 'baseAttack',
@@ -645,9 +622,7 @@ export const BattleResultOverlay: React.FC<{
                                     const baseKey = baseKeyMap[opt.stat];
                                     const statKey = statKeyMap[opt.stat];
                                     
-                                    // Shallow copy for projection
                                     const projectedBird = { ...initialBird, [baseKey]: (initialBird[baseKey] as number) + opt.value };
-                                    // Get stats at the FINAL level to show true outcome
                                     const projectedStats = getScaledStats(projectedBird, finalLevel);
                                     
                                     const currentVal = newStats[statKey];

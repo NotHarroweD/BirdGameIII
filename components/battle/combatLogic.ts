@@ -73,8 +73,18 @@ export const calculateCombatResult = (
 
     // Bleed Application
     let appliedBleed = false;
-    if (attacker.gear?.claws) {
-        if (Math.random() < 0.5) {
+    // Check both gear slots for SHARP prefix
+    const bleedBonus = (attacker.gear?.beak?.prefix === GearPrefix.SHARP ? (attacker.gear.beak.paramValue || 5) : 0) + 
+                      (attacker.gear?.claws?.prefix === GearPrefix.SHARP ? (attacker.gear.claws.paramValue || 5) : 0);
+
+    if (bleedBonus > 0) {
+        // Scale chance with prefix value (usually 5-30)
+        if (Math.random() * 100 < (15 + bleedBonus)) {
+            appliedBleed = true;
+        }
+    } else if (attacker.gear?.claws) {
+        // Base claws have a small fixed chance
+        if (Math.random() < 0.15) {
             appliedBleed = true;
         }
     }

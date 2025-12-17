@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { PlayerState, BirdInstance, GearType, Rarity, Gear, Gem, ConsumableType, GearPrefix } from '../types';
+import { PlayerState, BirdInstance, GearType, Rarity, Gear, Gem, ConsumableType, GearPrefix, StatType } from '../types';
 import { RARITY_CONFIG, BUFF_LABELS, ROSTER_BASE_CAPACITY, UPGRADE_COSTS } from '../constants';
 import { Button } from './Button';
 import { Card } from './Card';
-import { Swords, Wind, Shield, Heart, Zap, X, Target, Trash2, Eye, Hexagon, ArrowUpRight, Clock, Database, Hammer, Gem as GemIcon, Briefcase } from 'lucide-react';
+import { Swords, Wind, Shield, Heart, Zap, X, Target, Trash2, Eye, Hexagon, ArrowUpRight, Clock, Database, Hammer, Gem as GemIcon, Briefcase, ArrowUp, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getScaledStats } from './battle/utils';
 
 interface RosterViewProps {
   playerState: PlayerState;
@@ -18,6 +19,7 @@ interface RosterViewProps {
   onSalvageGear: (gear: Gear) => void;
   onSocketGem: (gearId: string, gemId: string, socketIndex: number) => void;
   onUnsocketGem: (gearId: string, socketIndex: number) => void;
+  onApplyLevelUpReward: (birdId: string, stat: StatType, value: number) => void;
 }
 
 export const RosterView: React.FC<RosterViewProps> = ({ 
@@ -30,7 +32,8 @@ export const RosterView: React.FC<RosterViewProps> = ({
     onReleaseBird,
     onSalvageGear,
     onSocketGem,
-    onUnsocketGem
+    onUnsocketGem,
+    onApplyLevelUpReward
 }) => {
   const selectedBird = playerState.birds.find(b => b.instanceId === playerState.selectedBirdId);
   const [equipSlot, setEquipSlot] = useState<'beak' | 'claws' | null>(null);
@@ -43,6 +46,10 @@ export const RosterView: React.FC<RosterViewProps> = ({
   
   const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
 
+  // Level Up Reward State
+  const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  const [rewardOptions, setRewardOptions] = useState<{stat: StatType, value: number, label: string, rarity: Rarity}[]>([]);
+
   // Sync state if gear is removed/salvaged while viewing
   useEffect(() => {
      if (viewingSlot && selectedBird && !selectedBird.gear[viewingSlot]) {
@@ -51,12 +58,74 @@ export const RosterView: React.FC<RosterViewProps> = ({
      }
   }, [selectedBird, viewingSlot]);
 
+  // Generate rewards whenever the modal opens or selected bird changes (if points exist)
+  useEffect(() => {
+      if (showLevelUpModal && selectedBird && selectedBird.statPoints > 0) {
+          generateLevelUpOptions();
+      } else if (!showLevelUpModal) {
+          setRewardOptions([]); // Clear on close
+      }
+  }, [showLevelUpModal, selectedBird?.instanceId]);
+
+  const generateLevelUpOptions = () => {
+        const stats: StatType[] = ['HP', 'ATK', 'DEF', 'SPD', 'NRG'];
+        const options = [];
+        
+        for(let i=0; i<3; i++) {
+            const stat = stats[Math.floor(Math.random() * stats.length)];
+            
+            // Roll Rarity for the Upgrade
+            const roll = Math.random();
+            let upgradeRarity = Rarity.COMMON;
+            
+            if (roll < 0.001) upgradeRarity = Rarity.MYTHIC;      // 0.1% Chance
+            else if (roll < 0.005) upgradeRarity = Rarity.LEGENDARY; // 0.4% Chance
+            else if (roll < 0.025) upgradeRarity = Rarity.EPIC;      // 2% Chance
+            else if (roll < 0.105) upgradeRarity = Rarity.RARE;      // 8% Chance
+            else if (roll < 0.355) upgradeRarity = Rarity.UNCOMMON;  // 25% Chance
+            // else Common (64.5%)
+            
+            let min = 1;
+            let max = 1;
+
+            if (stat === 'HP' || stat === 'NRG') {
+                // Pool Stats (HP/NRG) - Strictly Increasing Ranges
+                if (upgradeRarity === Rarity.COMMON) { min = 5; max = 8; }
+                else if (upgradeRarity === Rarity.UNCOMMON) { min = 9; max = 15; }
+                else if (upgradeRarity === Rarity.RARE) { min = 16; max = 25; }
+                else if (upgradeRarity === Rarity.EPIC) { min = 26; max = 40; }
+                else if (upgradeRarity === Rarity.LEGENDARY) { min = 41; max = 60; }
+                else if (upgradeRarity === Rarity.MYTHIC) { min = 61; max = 85; }
+            } else {
+                // Combat Stats (ATK/DEF/SPD) - Strictly Increasing Ranges
+                if (upgradeRarity === Rarity.COMMON) { min = 1; max = 1; }
+                else if (upgradeRarity === Rarity.UNCOMMON) { min = 2; max = 2; }
+                else if (upgradeRarity === Rarity.RARE) { min = 3; max = 3; }
+                else if (upgradeRarity === Rarity.EPIC) { min = 4; max = 5; }
+                else if (upgradeRarity === Rarity.LEGENDARY) { min = 6; max = 7; }
+                else if (upgradeRarity === Rarity.MYTHIC) { min = 8; max = 10; }
+            }
+            
+            const val = Math.floor(min + Math.random() * (max - min + 1));
+            const label = stat === 'HP' ? 'Max Health' : stat === 'ATK' ? 'Attack' : stat === 'DEF' ? 'Defense' : stat === 'SPD' ? 'Speed' : 'Max Energy';
+            
+            options.push({ stat, value: val, label, rarity: upgradeRarity });
+        }
+        setRewardOptions(options);
+  };
+
+  const handleSelectReward = (option: {stat: StatType, value: number}) => {
+      if (selectedBird) {
+          onApplyLevelUpReward(selectedBird.instanceId, option.stat, option.value);
+          setShowLevelUpModal(false);
+      }
+  };
+
   const isHunting = selectedBird && playerState.huntingBirdIds.includes(selectedBird.instanceId);
   
   // Hunting Rate Calculation with Gear Boosts
   const calculateHuntingRate = (bird: BirdInstance) => {
       if (!bird) return 0;
-      // Updated to 0.5 (50%) per level to match GameLogic
       let baseRate = (bird.huntingConfig.baseRate * RARITY_CONFIG[bird.rarity].minMult * (1 + bird.level * 0.5));
       
       let bonusPct = 0;
@@ -86,7 +155,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
       const addGear = (g: Gear | null) => {
           if (!g) return;
           bonuses.atk += g.attackBonus || 0;
-          // Apply Quality prefix flat damage
           if (g.prefix === GearPrefix.QUALITY && g.paramValue) {
               bonuses.atk += g.paramValue;
           }
@@ -143,7 +211,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
       }
   });
 
-  // Calculate total passive rate
   let totalPassiveRate = 0;
   playerState.huntingBirdIds.forEach(id => {
       const bird = playerState.birds.find(b => b.instanceId === id);
@@ -151,13 +218,12 @@ export const RosterView: React.FC<RosterViewProps> = ({
           totalPassiveRate += calculateHuntingRate(bird);
       }
   });
-  // Apply AP Boost to Total Rate
   const apBoost = 1 + (playerState.apShop.featherBoost * 0.02);
   totalPassiveRate *= apBoost * huntSpeedMult;
 
 
   const StatRow = ({icon, label, val, level, rarity, bonus}: {icon: React.ReactNode, label: string, val: number, level: number, rarity: Rarity, bonus: number}) => {
-    const total = Math.floor(val * (1 + level * 0.1)) + bonus;
+    const total = Math.floor(val * (1 + level * 0.25)) + bonus;
     return (
         <div className="flex items-center justify-between py-1 border-b border-slate-800/50 last:border-0">
             <div className="flex items-center gap-1.5 text-slate-500">
@@ -224,6 +290,26 @@ export const RosterView: React.FC<RosterViewProps> = ({
       if (prefix === GearPrefix.GREAT) return 'Crit Chance';
       return '';
   };
+
+  const StatChangeRow = ({ label, oldVal, newVal, icon: Icon, color }: { label: string, oldVal: number, newVal: number, icon: any, color: string }) => (
+        <div className="flex justify-between items-center bg-slate-950/30 p-1.5 rounded border border-slate-800">
+            <div className="flex items-center gap-1.5 text-slate-400">
+                <Icon size={10} className={color} />
+                <span className="text-[9px] uppercase font-bold">{label}</span>
+            </div>
+            <div className="flex items-center gap-1.5 font-mono text-xs">
+                <span className="text-slate-500">{oldVal}</span>
+                {newVal > oldVal ? (
+                    <>
+                        <span className="text-slate-700 text-[8px]">➜</span>
+                        <span className="text-emerald-400 font-bold">{newVal}</span>
+                    </>
+                ) : (
+                    <span className="text-slate-300">{newVal}</span>
+                )}
+            </div>
+        </div>
+  );
 
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-500">
@@ -304,7 +390,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
           </div>
       )}
 
-      {/* 2. Detail View (Now Above List) */}
+      {/* 2. Detail View */}
       {selectedBird ? (
         <Card variant="glass" rarity={selectedBird.rarity} className="clip-tech relative overflow-hidden">
              <div className={`absolute -right-20 -top-20 w-64 h-64 rounded-full blur-[100px] opacity-20 ${RARITY_CONFIG[selectedBird.rarity].glowColor.replace('shadow-', 'bg-')}`} />
@@ -318,8 +404,17 @@ export const RosterView: React.FC<RosterViewProps> = ({
                              {RARITY_CONFIG[selectedBird.rarity].name} Class
                         </div>
                     </div>
-                    <div className="text-right">
-                        <div className="text-2xl font-mono text-white">Lvl {selectedBird.level}</div>
+                    <div className="text-right flex flex-col items-end gap-1">
+                        {selectedBird.statPoints > 0 ? (
+                            <button 
+                                onClick={() => setShowLevelUpModal(true)} 
+                                className="animate-pulse text-yellow-400 font-bold font-tech text-lg drop-shadow-[0_0_10px_rgba(250,204,21,0.5)] border border-yellow-500/50 rounded px-3 py-1 bg-yellow-900/40 hover:bg-yellow-900/60 transition-colors flex items-center gap-2"
+                            >
+                                <ArrowUp size={16} /> LEVEL UP! <span className="bg-yellow-500 text-black text-[10px] px-1.5 rounded-full">{selectedBird.statPoints}</span>
+                            </button>
+                        ) : (
+                            <div className="text-2xl font-mono text-white">Lvl {selectedBird.level}</div>
+                        )}
                         <div className="text-[10px] text-slate-400">EXP {Math.floor(selectedBird.xp)} / {Math.floor(selectedBird.xpToNextLevel)}</div>
                     </div>
                 </div>
@@ -350,7 +445,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
                      </div>
                      
                      <div className="flex flex-col gap-2">
-                        {/* Passive */}
                         <div className="bg-slate-900/50 p-2 rounded border border-slate-800 flex-1">
                             <div className="flex items-center gap-2 text-purple-400 font-bold font-tech mb-1">
                                 <Eye size={14} /> PASSIVE
@@ -359,7 +453,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
                             <div className="text-[10px] text-slate-400 leading-tight">{selectedBird.passive.description}</div>
                         </div>
 
-                        {/* Hunting Assignment */}
                         <div className="bg-slate-900/50 p-2 rounded border border-slate-800 flex-1">
                             <div className="flex items-center justify-between mb-1">
                                 <div className="flex items-center gap-2 text-amber-400 font-bold font-tech">
@@ -404,7 +497,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
                                         </div>
                                     </div>
                                     
-                                    {/* Sockets Mini-Visual */}
                                     {gear && gear.sockets && gear.sockets.length > 0 && (
                                         <div className="absolute top-1 right-1 flex gap-0.5">
                                             {gear.sockets.map((gem, idx) => (
@@ -449,7 +541,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
         <div className="p-8 text-center text-slate-500 italic">No bird selected.</div>
       )}
 
-      {/* 3. Bird Roster List (Vertical) */}
+      {/* 3. Bird Roster List */}
       <div className="grid grid-cols-1 gap-3">
         {playerState.birds.map((bird) => {
             const isSelected = bird.instanceId === playerState.selectedBirdId;
@@ -483,6 +575,11 @@ export const RosterView: React.FC<RosterViewProps> = ({
                                     <Target size={10} className="text-amber-400 animate-pulse" />
                                 </div>
                             )}
+                            {bird.statPoints > 0 && !isSelected && (
+                                <div className="absolute bottom-0 left-0 right-0 bg-yellow-500/80 text-black text-[9px] font-bold text-center animate-pulse">
+                                    LEVEL UP!
+                                </div>
+                            )}
                         </div>
                         <div className="text-left">
                             <div className={`font-tech font-bold text-lg leading-none ${RARITY_CONFIG[bird.rarity].color}`}>{bird.name}</div>
@@ -509,7 +606,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
                                 >
                                     {slot === 'beak' ? <Swords size={16} className={gear ? RARITY_CONFIG[gear.rarity].color : 'text-slate-600'} /> : <Wind size={16} className={gear ? RARITY_CONFIG[gear.rarity].color : 'text-slate-600'} />}
                                     
-                                    {/* Sockets Dots */}
                                     {gear && gear.sockets && gear.sockets.length > 0 && (
                                         <div className="absolute -bottom-1 flex gap-0.5">
                                             {gear.sockets.map((s, i) => (
@@ -588,7 +684,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
               </motion.div>
           )}
 
-          {/* Gear Detail Modal (Equipped) */}
+          {/* Gear Detail Modal */}
           {viewingGear && viewingSlot && (
               <motion.div 
                 initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
@@ -600,7 +696,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
                     className="bg-slate-900 border border-slate-700 p-8 rounded-2xl max-w-sm w-full relative flex flex-col items-center shadow-2xl max-h-[80vh] overflow-y-auto"
                     onClick={e => e.stopPropagation()}
                   >
-                      {/* Close Button Added Here */}
                       <button 
                           onClick={() => setViewingSlot(null)} 
                           className="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors"
@@ -618,7 +713,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
                            <div className="text-sm font-bold uppercase tracking-widest text-slate-500">{RARITY_CONFIG[viewingGear.rarity].name} TIER</div>
                       </div>
                       
-                      {/* Stats */}
                       <div className="w-full grid grid-cols-2 gap-4 mb-4">
                           <div className="bg-slate-950 p-2 rounded border border-slate-800 text-center">
                               <div className="text-[10px] text-slate-500 uppercase">ATK Bonus</div>
@@ -634,7 +728,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
                           )}
                       </div>
 
-                      {/* Stat Bonuses */}
                       {viewingGear.statBonuses && viewingGear.statBonuses.length > 0 && (
                            <div className="w-full bg-slate-950/50 p-3 rounded border border-slate-800 mb-4">
                                <div className="text-[10px] text-slate-500 font-bold uppercase mb-2">Stat Boosts</div>
@@ -649,7 +742,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
                            </div>
                       )}
 
-                      {/* Sockets */}
                       {viewingGear.sockets && viewingGear.sockets.length > 0 && (
                         <div className="w-full bg-slate-950/30 p-3 rounded border border-slate-800/50 mb-6">
                             <div className="flex justify-between items-center mb-3">
@@ -668,10 +760,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
                                         ) : (
                                             <div className="w-2 h-2 rounded-full bg-slate-700 group-hover:bg-cyan-400" />
                                         )}
-                                        {/* Tooltip */}
-                                        <div className="absolute top-12 whitespace-nowrap bg-black text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none z-50">
-                                            {socket ? "Unsocket Gem" : "Add Gem"}
-                                        </div>
                                     </button>
                                 ))}
                             </div>
@@ -689,7 +777,6 @@ export const RosterView: React.FC<RosterViewProps> = ({
                         </div>
                       )}
 
-                      {/* Actions */}
                       <div className="grid grid-cols-2 gap-3 w-full">
                            <Button fullWidth variant="secondary" onClick={() => handleGearAction('unequip')} className="border-slate-700">
                                 UNEQUIP
@@ -751,6 +838,121 @@ export const RosterView: React.FC<RosterViewProps> = ({
                               ))}
                           </div>
                       )}
+                  </motion.div>
+              </motion.div>
+          )}
+
+          {/* Level Up Reward Modal */}
+          {showLevelUpModal && selectedBird && (
+              <motion.div 
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-6"
+                  onClick={() => setShowLevelUpModal(false)}
+              >
+                  <motion.div 
+                      initial={{ scale: 0.9, y: 50 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 50 }}
+                      className="bg-slate-900 border-2 border-yellow-500/50 p-6 rounded-2xl max-w-sm w-full relative flex flex-col items-center shadow-[0_0_50px_rgba(234,179,8,0.2)] max-h-[80vh] overflow-y-auto custom-scrollbar"
+                      onClick={e => e.stopPropagation()}
+                  >
+                      <div className="w-full flex items-center justify-center gap-2 mb-2 shrink-0">
+                          <ArrowUp size={24} className="text-yellow-400 animate-bounce" />
+                          <h2 className="font-tech text-2xl text-white uppercase tracking-widest text-center">
+                              LEVEL UP
+                          </h2>
+                          <ArrowUp size={24} className="text-yellow-400 animate-bounce" />
+                      </div>
+                      <p className="text-slate-400 text-xs mb-4 text-center shrink-0">
+                          {selectedBird.statPoints} point{selectedBird.statPoints > 1 ? 's' : ''} available. Choose an upgrade.
+                      </p>
+
+                      <div className="w-full bg-slate-950 p-3 rounded-lg border border-slate-800 mb-4 shrink-0">
+                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 text-center border-b border-slate-800 pb-1">
+                              Current Stats
+                          </div>
+                          {(() => {
+                              const stats = getScaledStats(selectedBird, selectedBird.level);
+                              const huntingYield = (selectedBird.huntingConfig.baseRate * RARITY_CONFIG[selectedBird.rarity].minMult) * (1 + selectedBird.level * 0.5);
+                              return (
+                                  <div className="grid grid-cols-2 gap-2">
+                                      <StatChangeRow label="HP" oldVal={stats.maxHp} newVal={stats.maxHp} icon={Heart} color="text-emerald-400" />
+                                      <StatChangeRow label="ATK" oldVal={stats.attack} newVal={stats.attack} icon={Zap} color="text-rose-400" />
+                                      <StatChangeRow label="DEF" oldVal={stats.defense} newVal={stats.defense} icon={Shield} color="text-blue-400" />
+                                      <StatChangeRow label="SPD" oldVal={stats.speed} newVal={stats.speed} icon={Wind} color="text-cyan-400" />
+                                      <StatChangeRow label="NRG" oldVal={stats.maxEnergy} newVal={stats.maxEnergy} icon={Zap} color="text-yellow-400" />
+                                      <div className="flex justify-between items-center bg-slate-950/30 p-1.5 rounded border border-slate-800">
+                                          <div className="flex items-center gap-1.5 text-slate-400">
+                                              <Target size={10} className="text-amber-400" />
+                                              <span className="text-[9px] uppercase font-bold">Yield</span>
+                                          </div>
+                                          <div className="flex items-center gap-1.5 font-mono text-xs">
+                                              <span className="text-amber-400 font-bold">{huntingYield.toFixed(1)}/s</span>
+                                          </div>
+                                      </div>
+                                  </div>
+                              );
+                          })()}
+                      </div>
+
+                      <div className="flex flex-col gap-2 w-full shrink-0">
+                          {rewardOptions.map((opt, i) => {
+                              let Icon = Zap;
+                              if (opt.stat === 'HP') Icon = Heart;
+                              if (opt.stat === 'DEF') Icon = Shield;
+                              if (opt.stat === 'SPD') Icon = Wind;
+                              
+                              const baseKeyMap: Record<StatType, keyof BirdInstance> = {
+                                  'HP': 'baseHp',
+                                  'ATK': 'baseAttack',
+                                  'DEF': 'baseDefense',
+                                  'SPD': 'baseSpeed',
+                                  'NRG': 'baseEnergy'
+                              };
+                              
+                              const statKeyMap: Record<StatType, 'maxHp' | 'attack' | 'defense' | 'speed' | 'maxEnergy'> = {
+                                  'HP': 'maxHp',
+                                  'ATK': 'attack',
+                                  'DEF': 'defense',
+                                  'SPD': 'speed',
+                                  'NRG': 'maxEnergy'
+                              };
+
+                              const baseKey = baseKeyMap[opt.stat];
+                              const statKey = statKeyMap[opt.stat];
+                              
+                              const currentStats = getScaledStats(selectedBird, selectedBird.level);
+                              const projectedBird = { ...selectedBird, [baseKey]: (selectedBird[baseKey] as number) + opt.value };
+                              const projectedStats = getScaledStats(projectedBird, selectedBird.level);
+                              
+                              const currentVal = currentStats[statKey];
+                              const projectedVal = projectedStats[statKey];
+
+                              return (
+                                  <button 
+                                      key={i}
+                                      onClick={() => handleSelectReward(opt)}
+                                      className={`w-full p-3 rounded-lg border-2 bg-slate-950 flex items-center justify-between transition-all hover:scale-[1.02] active:scale-95 ${RARITY_CONFIG[opt.rarity].borderColor} hover:bg-slate-900 group shadow-lg`}
+                                  >
+                                      <div className="flex items-center gap-3">
+                                          <div className={`w-10 h-10 rounded-full flex items-center justify-center border bg-slate-900 ${RARITY_CONFIG[opt.rarity].borderColor}`}>
+                                              <Icon size={20} className={RARITY_CONFIG[opt.rarity].color} />
+                                          </div>
+                                          <div className="text-left">
+                                              <div className={`font-bold font-tech text-sm ${RARITY_CONFIG[opt.rarity].color}`}>{opt.label}</div>
+                                              <div className="text-[9px] text-slate-500 font-bold uppercase">{RARITY_CONFIG[opt.rarity].name} Upgrade</div>
+                                          </div>
+                                      </div>
+                                      
+                                      <div className={`text-right ${RARITY_CONFIG[opt.rarity].color}`}>
+                                          <div className="flex items-center gap-2 justify-end">
+                                              <span className="text-slate-500 text-sm">{currentVal}</span>
+                                              <ArrowRight size={14} className="opacity-50" /> 
+                                              <span className="text-xl font-mono font-bold drop-shadow-md">{projectedVal}</span>
+                                          </div>
+                                      </div>
+                                  </button>
+                              )
+                          })}
+                      </div>
                   </motion.div>
               </motion.div>
           )}

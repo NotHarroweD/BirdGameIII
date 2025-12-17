@@ -36,6 +36,7 @@ export const Hub: React.FC<HubProps> = ({
     onClaimAchievement,
     onBuyAPUpgrade,
     onUnlockFeature,
+    onApplyLevelUpReward,
     currentZone,
     onSelectZone
 }) => {
@@ -140,6 +141,7 @@ export const Hub: React.FC<HubProps> = ({
                     onSalvageGear={onSalvageGear}
                     onSocketGem={onSocketGem}
                     onUnsocketGem={onUnsocketGem}
+                    onApplyLevelUpReward={onApplyLevelUpReward}
                   />
               </div>
           )}
