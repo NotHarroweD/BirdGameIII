@@ -46,8 +46,8 @@ export const MapView: React.FC<MapViewProps> = ({ playerState, onBattle, current
                        if (b.stat === 'SCRAP_BONUS') scrapBonus += b.value;
                        if (b.stat === 'FEATHER_BONUS') featherBonus += b.value;
                        if (b.stat === 'DIAMOND_BATTLE_CHANCE') diamondChanceBonus += b.value;
-                       if (b.stat === 'ITEM_FIND_CHANCE') itemFindBonus += b.value;
                        if (b.stat === 'GEM_FIND_CHANCE') gemFindBonus += b.value;
+                       if (b.stat === 'ITEM_FIND_CHANCE') itemFindBonus += b.value;
                    });
                }
            });
@@ -65,8 +65,11 @@ export const MapView: React.FC<MapViewProps> = ({ playerState, onBattle, current
   const effectiveFeather = calcEffectiveBoost(featherBonus, consumableMult, apFeatherMult);
   const effectiveScrap = calcEffectiveBoost(scrapBonus, consumableMult, apScrapMult);
   const effectiveXp = calcEffectiveBoost(xpBonus, 1.0, 1.0); 
+  const effectiveDiamond = calcEffectiveBoost(diamondChanceBonus, 1.0, apDiamondMult);
+  const effectiveItem = calcEffectiveBoost(itemFindBonus, 1.0, apItemMult);
+  const effectiveGem = calcEffectiveBoost(gemFindBonus, 1.0, apGemMult);
   
-  const hasBattleBoosts = effectiveFeather > 0 || effectiveScrap > 0 || effectiveXp > 0 || diamondChanceBonus > 0 || itemFindBonus > 0 || gemFindBonus > 0 || playerState.apShop.diamondBoost > 0 || playerState.apShop.itemDropBoost > 0;
+  const hasBattleBoosts = effectiveFeather > 0 || effectiveScrap > 0 || effectiveXp > 0 || effectiveDiamond > 0 || effectiveItem > 0 || effectiveGem > 0;
 
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-500">
@@ -111,37 +114,28 @@ export const MapView: React.FC<MapViewProps> = ({ playerState, onBattle, current
                           <div className="font-mono font-bold text-emerald-400">+{effectiveXp}%</div>
                       </div>
                   )}
-                  {(diamondChanceBonus > 0 || playerState.apShop.diamondBoost > 0) && (
+                  {effectiveDiamond > 0 && (
                       <div className="bg-slate-950/50 p-2 rounded border border-slate-800 flex items-center justify-between">
                           <div className="flex items-center gap-2 text-xs text-slate-400 uppercase font-bold">
                               <Gem size={14} className="text-blue-400" /> Diamond
                           </div>
-                          <div className="font-mono font-bold text-blue-400">
-                              {diamondChanceBonus > 0 ? `+${diamondChanceBonus}%` : ''} 
-                              {playerState.apShop.diamondBoost > 0 ? ` (x${apDiamondMult.toFixed(2)})` : ''}
-                          </div>
+                          <div className="font-mono font-bold text-blue-400">+{effectiveDiamond}%</div>
                       </div>
                   )}
-                  {(itemFindBonus > 0 || playerState.apShop.itemDropBoost > 0) && (
+                  {effectiveItem > 0 && (
                       <div className="bg-slate-950/50 p-2 rounded border border-slate-800 flex items-center justify-between">
                           <div className="flex items-center gap-2 text-xs text-slate-400 uppercase font-bold">
                               <Briefcase size={14} className="text-purple-400" /> Items
                           </div>
-                          <div className="font-mono font-bold text-purple-400">
-                              {itemFindBonus > 0 ? `+${itemFindBonus}%` : ''}
-                              {playerState.apShop.itemDropBoost > 0 ? ` (x${apItemMult.toFixed(2)})` : ''}
-                          </div>
+                          <div className="font-mono font-bold text-purple-400">+{effectiveItem}%</div>
                       </div>
                   )}
-                  {(gemFindBonus > 0 || playerState.apShop.gemDropBoost > 0) && (
+                  {effectiveGem > 0 && (
                       <div className="bg-slate-950/50 p-2 rounded border border-slate-800 flex items-center justify-between">
                           <div className="flex items-center gap-2 text-xs text-slate-400 uppercase font-bold">
                               <Hexagon size={14} className="text-rose-400" /> Gems
                           </div>
-                          <div className="font-mono font-bold text-rose-400">
-                              {gemFindBonus > 0 ? `+${gemFindBonus}%` : ''}
-                              {playerState.apShop.gemDropBoost > 0 ? ` (x${apGemMult.toFixed(2)})` : ''}
-                          </div>
+                          <div className="font-mono font-bold text-rose-400">+{effectiveGem}%</div>
                       </div>
                   )}
               </div>

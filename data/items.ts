@@ -111,14 +111,17 @@ export const BUFF_LABELS: Record<string, string> = {
 const RARITY_HIERARCHY = [Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE, Rarity.EPIC, Rarity.LEGENDARY, Rarity.MYTHIC];
 
 export const getMaxCraftRarity = (level: number): Rarity => {
-    // Base Unlock (Level 0) = Green (Uncommon)
-    // +1 Rarity every 5 levels.
     // Lvl 0: Index 1 (Uncommon)
-    // Lvl 5: Index 2 (Rare)
-    // Lvl 10: Index 3 (Epic)
-    // Lvl 15: Index 4 (Legendary)
-    // Lvl 20: Index 5 (Mythic)
-    const baseIndex = 1; // Start at Uncommon
+    const baseIndex = 1; 
+    const bonusIndex = Math.floor(level / 5);
+    const totalIndex = Math.min(5, baseIndex + bonusIndex);
+    return RARITY_HIERARCHY[totalIndex];
+};
+
+export const getMaxCatchRarity = (level: number): Rarity => {
+    // Initially should be able to catch white, green, and blue (Rare)
+    // Lvl 0: Index 2 (Rare)
+    const baseIndex = 2; 
     const bonusIndex = Math.floor(level / 5);
     const totalIndex = Math.min(5, baseIndex + bonusIndex);
     return RARITY_HIERARCHY[totalIndex];
@@ -128,49 +131,59 @@ export const getMaxCraftRarity = (level: number): Rarity => {
  * Enhanced Rarity Rolling Logic
  * Uses a base 0-1000 roll. 
  * Upgrade levels provide a flat bonus, pushing the distribution upwards.
+ * Multipliers for catching provide a significant but non-guaranteed weight bonus.
  */
 export const rollRarity = (upgradeLevel: number = 0, context: 'CATCH' | 'CRAFT' = 'CRAFT', multiplier: number = 1): Rarity => {
-  // Consistent base roll 0-1000
   const baseRoll = Math.random() * 1000;
   
-  // Strong level bonus for crafting progression. 
-  // At Level 10 (Purple unlocked), bonus is 200, allowing access to Epic tier.
-  // At Level 20 (Mythic unlocked), bonus is 400.
-  const levelBonus = upgradeLevel * 20;
-
-  let multiplierBonus = 0;
-  if (context === 'CATCH') {
-      if (multiplier >= 2) multiplierBonus += 50;
-      if (multiplier >= 3) multiplierBonus += 120;
-      if (multiplier >= 4) multiplierBonus += 300; 
-      if (multiplier >= 5) multiplierBonus += 550; 
-  }
-
-  const totalScore = baseRoll + levelBonus + multiplierBonus;
-
-  // Refined Thresholds for "Incredibly Rare" high tiers
-  // Max possible score at lvl 20 is 1400 (excluding catch multipliers)
-  let rarity = Rarity.COMMON;
-  
-  if (totalScore > 1380) rarity = Rarity.MYTHIC; // ~2% at lvl 20
-  else if (totalScore > 1250) rarity = Rarity.LEGENDARY; // ~13% at lvl 20, ~5% at lvl 15
-  else if (totalScore > 1080) rarity = Rarity.EPIC; // ~12% at lvl 10
-  else if (totalScore > 850) rarity = Rarity.RARE; // ~25% at lvl 5
-  else if (totalScore > 500) rarity = Rarity.UNCOMMON; // ~50% at lvl 0
-
-  // Hard Gating for CRAFTING only
-  // If player rolls higher than their facility allows, they get the maximum allowed tier instead.
   if (context === 'CRAFT') {
+      const levelBonus = upgradeLevel * 20;
+      const totalScore = baseRoll + levelBonus;
+
+      let rarity = Rarity.COMMON;
+      if (totalScore > 1380) rarity = Rarity.MYTHIC;
+      else if (totalScore > 1250) rarity = Rarity.LEGENDARY;
+      else if (totalScore > 1080) rarity = Rarity.EPIC;
+      else if (totalScore > 850) rarity = Rarity.RARE;
+      else if (totalScore > 500) rarity = Rarity.UNCOMMON;
+
       const maxAllowed = getMaxCraftRarity(upgradeLevel);
       const currentIdx = RARITY_HIERARCHY.indexOf(rarity);
       const maxIdx = RARITY_HIERARCHY.indexOf(maxAllowed);
+      return currentIdx > maxIdx ? maxAllowed : rarity;
 
-      if (currentIdx > maxIdx) {
-          return maxAllowed;
+  } else {
+      // CATCH context - Refined for randomness as requested
+      const levelBonus = upgradeLevel * 12; // Slight increase in chances per level
+      
+      let multiplierBonus = 0;
+      if (multiplier === 2) multiplierBonus = 80;
+      else if (multiplier === 3) multiplierBonus = 180;
+      else if (multiplier === 4) multiplierBonus = 320;
+      else if (multiplier === 5) multiplierBonus = 480;
+
+      const totalScore = baseRoll + levelBonus + multiplierBonus;
+
+      let rarity = Rarity.COMMON;
+      // Adjusted catch thresholds to ensure a x5 multiplier (480 bonus) 
+      // results in a balanced mix of high and mid rarities rather than guarantees.
+      if (totalScore > 1420) rarity = Rarity.MYTHIC;
+      else if (totalScore > 1220) rarity = Rarity.LEGENDARY;
+      else if (totalScore > 980) rarity = Rarity.EPIC;
+      else if (totalScore > 720) rarity = Rarity.RARE;
+      else if (totalScore > 380) rarity = Rarity.UNCOMMON;
+
+      let maxAllowed = getMaxCatchRarity(upgradeLevel);
+      
+      // Preserve specific rule: blue (Rare) strictly requires x5 at start (Level < 5)
+      if (upgradeLevel < 5 && multiplier < 5) {
+          maxAllowed = Rarity.UNCOMMON;
       }
+      
+      const currentIdx = RARITY_HIERARCHY.indexOf(rarity);
+      const maxIdx = RARITY_HIERARCHY.indexOf(maxAllowed);
+      return currentIdx > maxIdx ? maxAllowed : rarity;
   }
-
-  return rarity;
 };
 
 const RARITY_INDEX = {

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { BirdInstance, BattleBird, Move, BattleLog, MoveType, Altitude, SkillCheckType, BattleResult, Rarity, ActiveBuff, ConsumableType, Consumable, APShopState, EnemyPrefix, ZoneClearReward, StatType } from '../types';
 import { RARITY_CONFIG, rollRarity } from '../constants';
@@ -718,6 +719,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                     winner={resultData.winner}
                     rewards={resultData.rewards}
                     initialBird={initialPlayerBird.current}
+                    updatedBird={playerBirdInstance}
                     onContinue={onBattleExit}
                     currentZoneProgress={currentZoneProgress}
                     requiredRarities={requiredRarities}

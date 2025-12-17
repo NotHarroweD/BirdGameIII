@@ -169,6 +169,13 @@ export interface Bird {
 
 export interface BirdTemplate extends Bird {}
 
+export interface StatOption {
+  stat: StatType;
+  value: number;
+  label: string;
+  rarity: Rarity;
+}
+
 export interface BirdInstance extends Bird {
   instanceId: string;
   rarity: Rarity;
@@ -182,6 +189,7 @@ export interface BirdInstance extends Bird {
     beak: Gear | null;
     claws: Gear | null;
   };
+  pendingStatOptions?: StatOption[];
 }
 
 export interface BattleBird extends BirdInstance {

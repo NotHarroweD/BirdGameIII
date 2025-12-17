@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { BirdInstance, Rarity, Gem, Consumable, EnemyPrefix, StatType } from '../types';
+import { BirdInstance, Rarity, Gem, Consumable, EnemyPrefix, StatType, StatOption } from '../types';
 import { RARITY_CONFIG, XP_TABLE } from '../constants';
 import { Button } from './Button';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -108,6 +108,7 @@ export const BattleResultOverlay: React.FC<{
     winner: 'player' | 'opponent';
     rewards: { xp: number; feathers: number; scrap: number; diamonds: number; gem?: Gem; consumable?: Consumable };
     initialBird: BirdInstance;
+    updatedBird?: BirdInstance;
     onContinue: (playAgain: boolean) => void;
     currentZoneProgress: Rarity[];
     requiredRarities: Rarity[];
@@ -115,7 +116,7 @@ export const BattleResultOverlay: React.FC<{
     enemyPrefix?: EnemyPrefix;
     isHighestZone: boolean;
     onApplyLevelUpReward?: (birdId: string, stat: StatType, value: number) => void;
-}> = ({ winner, rewards, initialBird, onContinue, currentZoneProgress, requiredRarities, opponentRarity, enemyPrefix, isHighestZone, onApplyLevelUpReward }) => {
+}> = ({ winner, rewards, initialBird, updatedBird, onContinue, currentZoneProgress, requiredRarities, opponentRarity, enemyPrefix, isHighestZone, onApplyLevelUpReward }) => {
     
     const isVictory = winner === 'player';
     
@@ -128,7 +129,6 @@ export const BattleResultOverlay: React.FC<{
     const [showButtons, setShowButtons] = useState(false);
 
     const [showLevelUpRewards, setShowLevelUpRewards] = useState(false);
-    const [rewardOptions, setRewardOptions] = useState<{stat: StatType, value: number, label: string, rarity: Rarity}[]>([]);
     const [rewardsClaimed, setRewardsClaimed] = useState(false);
 
     const finalLevel = React.useMemo(() => {
@@ -146,56 +146,6 @@ export const BattleResultOverlay: React.FC<{
 
     const isLevelUp = finalLevel > initialBird.level;
 
-    useEffect(() => {
-        if (isLevelUp && !rewardsClaimed) {
-            const generateOptions = () => {
-                const stats: StatType[] = ['HP', 'ATK', 'DEF', 'SPD', 'NRG'];
-                const options = [];
-                
-                for(let i=0; i<3; i++) {
-                    const stat = stats[Math.floor(Math.random() * stats.length)];
-                    
-                    const roll = Math.random();
-                    let upgradeRarity = Rarity.COMMON;
-                    
-                    if (roll < 0.001) upgradeRarity = Rarity.MYTHIC;      
-                    else if (roll < 0.005) upgradeRarity = Rarity.LEGENDARY; 
-                    else if (roll < 0.025) upgradeRarity = Rarity.EPIC;      
-                    else if (roll < 0.105) upgradeRarity = Rarity.RARE;      
-                    else if (roll < 0.355) upgradeRarity = Rarity.UNCOMMON;  
-                    
-                    let min = 1;
-                    let max = 1;
-
-                    if (stat === 'HP' || stat === 'NRG') {
-                        // Strictly Increasing Ranges - Matches tuned RosterView
-                        if (upgradeRarity === Rarity.COMMON) { min = 5; max = 8; }
-                        else if (upgradeRarity === Rarity.UNCOMMON) { min = 9; max = 15; }
-                        else if (upgradeRarity === Rarity.RARE) { min = 16; max = 25; }
-                        else if (upgradeRarity === Rarity.EPIC) { min = 26; max = 40; }
-                        else if (upgradeRarity === Rarity.LEGENDARY) { min = 41; max = 60; }
-                        else if (upgradeRarity === Rarity.MYTHIC) { min = 61; max = 85; }
-                    } else {
-                        // Strictly Increasing Ranges - Matches tuned RosterView
-                        if (upgradeRarity === Rarity.COMMON) { min = 1; max = 1; }
-                        else if (upgradeRarity === Rarity.UNCOMMON) { min = 2; max = 2; }
-                        else if (upgradeRarity === Rarity.RARE) { min = 3; max = 3; }
-                        else if (upgradeRarity === Rarity.EPIC) { min = 4; max = 5; }
-                        else if (upgradeRarity === Rarity.LEGENDARY) { min = 6; max = 7; }
-                        else if (upgradeRarity === Rarity.MYTHIC) { min = 8; max = 10; }
-                    }
-                    
-                    const val = Math.floor(min + Math.random() * (max - min + 1));
-                    const label = stat === 'HP' ? 'Max Health' : stat === 'ATK' ? 'Attack' : stat === 'DEF' ? 'Defense' : stat === 'SPD' ? 'Speed' : 'Max Energy';
-                    
-                    options.push({ stat, value: val, label, rarity: upgradeRarity });
-                }
-                setRewardOptions(options);
-            };
-            generateOptions();
-        }
-    }, [finalLevel, initialBird.level, rewardsClaimed, isLevelUp]);
-
     const handleLevelUpClick = () => {
         if (rewardsClaimed) return;
         setShowLevelUpRewards(true);
@@ -205,8 +155,11 @@ export const BattleResultOverlay: React.FC<{
         if (onApplyLevelUpReward) {
             onApplyLevelUpReward(initialBird.instanceId, option.stat, option.value);
         }
-        setRewardsClaimed(true);
-        setShowLevelUpRewards(false);
+        // Logic to keep modal open if multiple points exist
+        if (updatedBird && updatedBird.statPoints <= 1) {
+            setRewardsClaimed(true);
+            setShowLevelUpRewards(false);
+        }
     };
 
     const isZoneCleared = React.useMemo(() => {
@@ -399,7 +352,7 @@ export const BattleResultOverlay: React.FC<{
                                         disabled={rewardsClaimed}
                                     >
                                         <span className={`text-yellow-400 font-black font-tech tracking-widest drop-shadow-[0_0_10px_rgba(250,204,21,0.8)] text-2xl ${!rewardsClaimed ? 'animate-pulse' : ''}`}>
-                                            {rewardsClaimed ? 'UPGRADE APPLIED' : 'LEVEL UP!'}
+                                            {rewardsClaimed ? 'UPGRADE APPLIED' : (finalLevel - initialBird.level > 1) ? `LEVEL UP x${finalLevel - initialBird.level}!` : 'LEVEL UP!'}
                                         </span>
                                         {!rewardsClaimed && (
                                             <span className="text-[10px] text-yellow-200 mt-1 uppercase tracking-wider bg-yellow-900/40 px-2 py-0.5 rounded border border-yellow-700/50">
@@ -551,7 +504,7 @@ export const BattleResultOverlay: React.FC<{
             </motion.div>
 
             <AnimatePresence>
-                {showLevelUpRewards && (
+                {showLevelUpRewards && updatedBird && updatedBird.pendingStatOptions && (
                     <motion.div 
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-6"
@@ -569,7 +522,7 @@ export const BattleResultOverlay: React.FC<{
                                 <ArrowUp size={24} className="text-yellow-400 animate-bounce" />
                             </div>
                             <p className="text-slate-400 text-xs mb-4 text-center shrink-0">
-                                Unit upgraded to Level {finalLevel}.
+                                {updatedBird.statPoints} point{updatedBird.statPoints > 1 ? 's' : ''} available. Choose an upgrade.
                             </p>
 
                             <div className="w-full bg-slate-950 p-3 rounded-lg border border-slate-800 mb-4 shrink-0">
@@ -597,7 +550,7 @@ export const BattleResultOverlay: React.FC<{
                             </div>
 
                             <div className="flex flex-col gap-2 w-full shrink-0">
-                                {rewardOptions.map((opt, i) => {
+                                {updatedBird.pendingStatOptions.map((opt, i) => {
                                     let Icon = Zap;
                                     if (opt.stat === 'HP') Icon = Heart;
                                     if (opt.stat === 'DEF') Icon = Shield;

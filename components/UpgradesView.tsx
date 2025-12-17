@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { PlayerState, UpgradeState, UnlocksState } from '../types';
-import { UPGRADE_DEFINITIONS, getMaxCraftRarity, RARITY_CONFIG } from '../constants';
+import { UPGRADE_DEFINITIONS, getMaxCraftRarity, getMaxCatchRarity, RARITY_CONFIG } from '../constants';
 import { Button } from './Button';
 import { ArrowUpCircle, Hammer, Database, Gem } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -35,8 +34,11 @@ export const UpgradesView: React.FC<UpgradesViewProps> = ({ playerState, onUpgra
                 // Special handling for Rarity Unlocks
                 let nextUnlockText = "";
                 let maxRarityText = "";
-                if (def.id === 'craftRarityLevel' || def.id === 'gemRarityLevel') {
-                    const maxRarity = getMaxCraftRarity(currentLevel);
+                if (def.id === 'craftRarityLevel' || def.id === 'gemRarityLevel' || def.id === 'catchRarityLevel') {
+                    const maxRarity = def.id === 'catchRarityLevel' 
+                        ? getMaxCatchRarity(currentLevel) 
+                        : getMaxCraftRarity(currentLevel);
+                        
                     maxRarityText = `MAX TIER: ${RARITY_CONFIG[maxRarity].name}`;
                     
                     const nextUnlockLevel = (Math.floor(currentLevel / 5) + 1) * 5;
