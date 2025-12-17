@@ -333,7 +333,10 @@ export const RosterView: React.FC<RosterViewProps> = ({
                                 className="w-full h-full object-cover" 
                                 referrerPolicy="no-referrer"
                                 onError={(e) => {
-                                    e.currentTarget.src = 'https://placehold.co/400x400/1e293b/475569?text=' + selectedBird.name;
+                                    const target = e.currentTarget;
+                                    if (!target.src.includes('placehold.co')) {
+                                        target.src = 'https://placehold.co/400x400/1e293b/475569?text=' + selectedBird.name;
+                                    }
                                 }}
                             />
                         </div>
@@ -469,7 +472,10 @@ export const RosterView: React.FC<RosterViewProps> = ({
                                 className="w-full h-full object-cover" 
                                 referrerPolicy="no-referrer"
                                 onError={(e) => {
-                                    e.currentTarget.src = 'https://placehold.co/400x400/1e293b/475569?text=' + bird.name;
+                                    const target = e.currentTarget;
+                                    if (!target.src.includes('placehold.co')) {
+                                        target.src = 'https://placehold.co/400x400/1e293b/475569?text=' + bird.name;
+                                    }
                                 }}
                             />
                             {isHuntingBird && (

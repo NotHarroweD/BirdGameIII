@@ -41,7 +41,10 @@ export const BattleStage: React.FC<BattleStageProps> = ({
                                 className="w-full h-full object-cover" 
                                 referrerPolicy="no-referrer" 
                                 onError={(e) => {
-                                    e.currentTarget.src = 'https://placehold.co/400x400/1e293b/475569?text=' + opponentBird.name;
+                                    const target = e.currentTarget;
+                                    if (!target.src.includes('placehold.co')) {
+                                        target.src = 'https://placehold.co/400x400/1e293b/475569?text=' + opponentBird.name;
+                                    }
                                 }}
                             />
                         </div>
@@ -126,7 +129,10 @@ export const BattleStage: React.FC<BattleStageProps> = ({
                                 className="w-full h-full object-cover scale-x-[-1]" 
                                 referrerPolicy="no-referrer" 
                                 onError={(e) => {
-                                    e.currentTarget.src = 'https://placehold.co/400x400/1e293b/475569?text=' + playerBird.name;
+                                    const target = e.currentTarget;
+                                    if (!target.src.includes('placehold.co')) {
+                                        target.src = 'https://placehold.co/400x400/1e293b/475569?text=' + playerBird.name;
+                                    }
                                 }}
                             />
                         </div>
