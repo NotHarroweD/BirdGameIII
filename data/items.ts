@@ -1,4 +1,3 @@
-
 import { Rarity, RarityTier, Gear, GearType, GearBuff, UtilityBuffType, Gem, StatBonus, StatType, ConsumableType, GearPrefix } from '../types';
 
 export const RARITY_CONFIG: Record<Rarity, RarityTier> = {
@@ -135,8 +134,8 @@ export const rollRarity = (upgradeLevel: number = 0, context: 'CATCH' | 'CRAFT' 
   const baseRoll = Math.random() * 1000;
   
   // Strong level bonus for crafting progression. 
-  // At Level 10 (Purple unlocked), bonus is 200, allowing access to Epic tier (950+).
-  // At Level 20 (Mythic unlocked), bonus is 400, allowing access to Mythic tier (1300+).
+  // At Level 10 (Purple unlocked), bonus is 200, allowing access to Epic tier.
+  // At Level 20 (Mythic unlocked), bonus is 400.
   const levelBonus = upgradeLevel * 20;
 
   let multiplierBonus = 0;
@@ -149,14 +148,15 @@ export const rollRarity = (upgradeLevel: number = 0, context: 'CATCH' | 'CRAFT' 
 
   const totalScore = baseRoll + levelBonus + multiplierBonus;
 
-  // Refined Thresholds based on a ~1000-1400 possible range at endgame
+  // Refined Thresholds for "Incredibly Rare" high tiers
+  // Max possible score at lvl 20 is 1400 (excluding catch multipliers)
   let rarity = Rarity.COMMON;
   
-  if (totalScore > 1300) rarity = Rarity.MYTHIC;
-  else if (totalScore > 1150) rarity = Rarity.LEGENDARY;
-  else if (totalScore > 950) rarity = Rarity.EPIC;
-  else if (totalScore > 700) rarity = Rarity.RARE;
-  else if (totalScore > 400) rarity = Rarity.UNCOMMON;
+  if (totalScore > 1380) rarity = Rarity.MYTHIC; // ~2% at lvl 20
+  else if (totalScore > 1250) rarity = Rarity.LEGENDARY; // ~13% at lvl 20, ~5% at lvl 15
+  else if (totalScore > 1080) rarity = Rarity.EPIC; // ~12% at lvl 10
+  else if (totalScore > 850) rarity = Rarity.RARE; // ~25% at lvl 5
+  else if (totalScore > 500) rarity = Rarity.UNCOMMON; // ~50% at lvl 0
 
   // Hard Gating for CRAFTING only
   // If player rolls higher than their facility allows, they get the maximum allowed tier instead.

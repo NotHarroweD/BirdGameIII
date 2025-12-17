@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { BirdInstance, BattleBird, Move, BattleLog, MoveType, Altitude, SkillCheckType, BattleResult, Rarity, ActiveBuff, ConsumableType, Consumable, APShopState, EnemyPrefix, ZoneClearReward, StatType } from '../types';
 import { RARITY_CONFIG, rollRarity } from '../constants';
@@ -306,7 +305,11 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                   
                   if (isZoneCleared) {
                       const type = Math.random() < 0.5 ? ConsumableType.HUNTING_SPEED : ConsumableType.BATTLE_REWARD;
-                      const rarity = rollRarity(enemyLevel * 10, 'CRAFT', 1);
+                      
+                      // User requested: selected from white, green, and blue
+                      const pool = [Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE];
+                      const rarity = pool[Math.floor(Math.random() * pool.length)];
+                      
                       const rewardItem: Consumable = { type, rarity, count: 1 };
 
                       zoneClearReward = {
