@@ -6,27 +6,40 @@ Welcome to the official repository for **Bird Game 3**, a tactical avian combat 
 
 ## 🛠 Latest Update Log
 
-### [1.2.0] - Tactical Rebalance
+### [1.3.0] - Mechanical Refinement & UI Polish
 **Release Date: Current**
 
+#### 📈 Progression & Leveling
+- **Persistent Level-Up Rewards**: Stat options are now generated once per level-up point and stored on the bird instance. This eliminates the "reroll exploit" where players could reset their options by closing the menu.
+- **Multi-Level Scaling**: Battles that grant massive XP now correctly trigger multiple level-up sequences, allowing players to assign all earned stat points sequentially.
+
+#### 📡 Recruitment & Scanning
+- **Rarity Weighted Randomness**: Overhauled the bird catching algorithm. While high multipliers (like x5) significantly boost the odds of high-tier birds, they no longer guarantee a specific rarity, ensuring every encounter remains a surprise.
+- **Signal Booster Integration**: The bird catching upgrade now explicitly lists the highest rarity class currently obtainable and unlocks new tiers every 5 levels.
+- **Early Game Gating**: Rare (Blue) birds now strictly require a x5 multiplier to appear in the early game, emphasizing skill in the scanning mini-game.
+
+#### 📦 Inventory & Gear
+- **UI Synchronization**: Re-engineered the Beak equipment menu to match the scrollable, high-capacity behavior of the Claws and Gems menus.
+- **Resource Boost Standardizing**: Unified all Hunting and Battle boosts to display as percentages (e.g., +15%) rather than mixed multipliers.
+- **Dynamic HUD**: Dashboard displays now automatically hide resource types with 0% bonuses, providing a cleaner tactical overview.
+
+---
+
+### [1.2.0] - Tactical Rebalance
 #### ⚔️ Combat & Enemy Balancing
-- **Strict Zone Gating**: Enemies of specific rarity classes now only appear once the player reaches the zone where that rarity is required for clearance. No more seeing gold/red enemies in Zone 1.
-- **Weighted Encounters**: Overhauled the encounter generator to ensure lower-tier enemies remain the primary encounter type, while higher-tier units (Legendary and Mythic) are appropriately rare and intimidating.
+- **Strict Zone Gating**: Enemies of specific rarity classes now only appear once the player reaches the zone where that rarity is required for clearance.
+- **Weighted Encounters**: Overhauled the encounter generator to ensure lower-tier enemies remain the primary encounter type.
 
 #### 💎 Loot & Economics
-- **Prestige Rarity**: Significantly increased the internal score thresholds for **Mythic** and **Legendary** items. These tiers are now "Incredibly Rare," requiring advanced workshop levels or extreme luck.
-- **Zone Reward Capping**: Restricted the item rewards for clearing a zone to a pool of **Common (White)**, **Uncommon (Green)**, and **Rare (Blue)**. This prevents early-game high-tier item bloating and maintains the value of the crafting system.
+- **Prestige Rarity**: Significantly increased the internal score thresholds for **Mythic** and **Legendary** items.
+- **Zone Reward Capping**: Restricted the item rewards for clearing a zone to a pool of Common, Uncommon, and Rare tiers.
 
 ---
 
 ### [1.1.0] - Workshop Overhaul
 #### 🔨 Crafting
-- **Rarity Engine 2.0**: Re-engineered the rarity calculation logic to provide a more consistent progression feel.
-- **Progression Buffs**: Adjusted Forge Level and Gemforge Mastery to have a higher impact on roll results, ensuring that unlocking a new tier actually makes those items obtainable within a reasonable timeframe.
-- **Crafting Gating**: Implemented hard caps on crafting results to ensure players receive the best item allowed by their current facility level when rolling high.
-
-#### 📜 Systems
-- **Update Log Initialization**: Started the formal documentation of system changes.
+- **Rarity Engine 2.0**: Re-engineered the rarity calculation logic for more consistent progression.
+- **Crafting Gating**: Implemented hard caps based on facility levels.
 
 ---
 
