@@ -1,4 +1,3 @@
-![Deploy Website](https://github.com/NotHarroweD/BirdGameIII/actions/workflows/deploy.yml/badge.svg)
 # 🦅 Bird Game 3: Wings of Glory
 
 Welcome to the official repository for **Bird Game 3**, a tactical avian combat game where strategy meets procedural loot and intense battle mechanics.

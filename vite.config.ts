@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
-    base: '/BirdGameIII/',
+    base: '/',
     plugins: [react()],
     resolve: {
       alias: {

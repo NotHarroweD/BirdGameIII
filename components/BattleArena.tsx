@@ -46,9 +46,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     requiredRarities = [],
     gemUnlocked = false
 }) => {
-  // Store initial bird for level up display comparison in overlay
   const initialPlayerBird = useRef<BirdInstance>(playerBirdInstance);
-
   const playerStats = getScaledStats(playerBirdInstance, playerBirdInstance.level);
   
   const [playerBird, setPlayerBird] = useState<BattleBird | null>({ 
@@ -61,10 +59,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   });
 
   const [playerTurnCount, setPlayerTurnCount] = useState(0);
-
   const opponentRef = useRef<BirdInstance | null>(null);
-  
-  // Initialize Opponent
   const [opponentBird, setOpponentBird] = useState<BattleBird | null>(null);
 
   useEffect(() => {
@@ -90,11 +85,10 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   
   const playerBirdRef = useRef(playerBird);
   const opponentBirdRef = useRef(opponentBird);
-  const winnerRef = useRef(winner);
+  const winnerRef = useRef<string | null>(null);
   
   useEffect(() => { playerBirdRef.current = playerBird; }, [playerBird]);
   useEffect(() => { opponentBirdRef.current = opponentBird; }, [opponentBird]);
-  useEffect(() => { winnerRef.current = winner; }, [winner]);
 
   const [activeSkillCheck, setActiveSkillCheck] = useState<ActiveSkillCheck | null>(null);
   const skillCheckRef = useRef<ActiveSkillCheck | null>(null);
@@ -122,7 +116,16 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  // --- Helpers ---
+  // Reactive Win/Loss Detection
+  useEffect(() => {
+      if (winnerRef.current) return;
+      if (playerBird && playerBird.currentHp <= 0) {
+          handleWin('opponent');
+      } else if (opponentBird && opponentBird.currentHp <= 0) {
+          handleWin('player');
+      }
+  }, [playerBird?.currentHp, opponentBird?.currentHp]);
+
   const triggerShake = async (intensity = 10) => {
     await controls.start({
       x: [0, -intensity, intensity, -intensity/2, intensity/2, 0],
@@ -165,15 +168,19 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   };
 
   const executeMove = async (attacker: BattleBird, defender: BattleBird, move: Move, isPlayer: boolean, multiplier: number, secondaryMultiplier: number = 0) => {
+    if (winnerRef.current) return;
+    
     const anim = isPlayer ? playerAnim : opponentAnim;
     
-    // Animation Logic
+    // Play sound-like motion immediately
     if (move.type === MoveType.ATTACK || move.type === MoveType.SPECIAL || move.type === MoveType.DRAIN) {
         const xMove = isPlayer ? 60 : -60;
         const yMove = isPlayer ? -60 : 60;
-        await anim.start({ x: -xMove * 0.2, y: -yMove * 0.2, scale: 0.9, transition: { duration: 0.1 } });
-        await anim.start({ x: xMove, y: yMove, scale: 1.2, transition: { duration: 0.08, ease: "easeIn" } });
-        anim.start({ x: 0, y: 0, scale: 1, transition: { duration: 0.3, type: "spring" } });
+        anim.start({ x: -xMove * 0.2, y: -yMove * 0.2, scale: 0.9, transition: { duration: 0.1 } }).then(() => {
+            anim.start({ x: xMove, y: yMove, scale: 1.2, transition: { duration: 0.08, ease: "easeIn" } }).then(() => {
+                anim.start({ x: 0, y: 0, scale: 1, transition: { duration: 0.3, type: "spring" } });
+            });
+        });
     }
 
     const setAttacker = isPlayer ? setPlayerBird : setOpponentBird;
@@ -182,10 +189,12 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     const defenderTarget = isPlayer ? 'opponent' : 'player';
 
     const queueText = (text: string, target: 'player' | 'opponent', color: string, scale: number, delay: number, xOffset = 0) => {
-        setTimeout(() => spawnFloatingText(text, target, xOffset + (Math.random() * 20 - 10), (Math.random() * 20), color, scale), delay);
+        setTimeout(() => {
+            if (winnerRef.current) return;
+            spawnFloatingText(text, target, xOffset + (Math.random() * 20 - 10), (Math.random() * 20), color, scale);
+        }, delay);
     };
 
-    // Calculate Outcome using imported logic
     const outcome = calculateCombatResult(attacker, defender, move, multiplier);
 
     if (outcome.isHit) {
@@ -214,15 +223,13 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                 const newHp = Math.max(0, prev.currentHp - finalDamage);
                 const newEffects = [...prev.statusEffects];
                 if (outcome.appliedBleed && !newEffects.includes('bleed')) newEffects.push('bleed');
-                
-                if (newHp <= 0) handleWin(isPlayer ? 'player' : 'opponent');
                 return { ...prev, currentHp: newHp, statusEffects: newEffects };
             });
 
             triggerShake(finalDamage > 30 ? 20 : 8);
             triggerHitFlash();
 
-            const victimAnim = isPlayer ? playerAnim : opponentAnim;
+            const victimAnim = isPlayer ? opponentAnim : playerAnim;
             victimAnim.start({ x: [0, 15, -15, 10, -10, 0], transition: { duration: 0.3 } });
 
             let delayOffset = 0;
@@ -244,8 +251,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     } else {
         if (defender.speed > attacker.speed && Math.random() < 0.5) {
              queueText("DODGED!", defenderTarget, "text-cyan-400", 1.5, 0);
-             const dodgeAnim = isPlayer ? playerAnim : opponentAnim;
-             dodgeAnim.start({ x: isPlayer ? -50 : 50, transition: { duration: 0.2 } }).then(() => {
+             const dodgeAnim = isPlayer ? opponentAnim : playerAnim;
+             dodgeAnim.start({ x: isPlayer ? 50 : -50, transition: { duration: 0.2 } }).then(() => {
                  dodgeAnim.start({ x: 0, transition: { duration: 0.2 } });
              });
         } else {
@@ -257,6 +264,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   const handleWin = (w: 'player' | 'opponent') => {
       if (winnerRef.current || !opponentBirdRef.current) return;
       
+      winnerRef.current = w;
       setWinner(w);
       stopLoop();
 
@@ -270,14 +278,12 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               gemUnlocked
           );
 
-          // Report results immediately to update Global State
           onReportResults({
               winner: 'player',
               opponentRarity: opponentBirdRef.current.rarity,
               rewards
           });
 
-          // Zone Clear Logic
           let zoneClearReward: ZoneClearReward | undefined;
           const isHighestZone = enemyLevel === highestZone;
           
@@ -306,11 +312,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                   
                   if (isZoneCleared) {
                       const type = Math.random() < 0.5 ? ConsumableType.HUNTING_SPEED : ConsumableType.BATTLE_REWARD;
-                      
-                      // User requested: selected from white, green, and blue
                       const pool = [Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE];
                       const rarity = pool[Math.floor(Math.random() * pool.length)];
-                      
                       const rewardItem: Consumable = { type, rarity, count: 1 };
 
                       zoneClearReward = {
@@ -331,9 +334,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                   opponentRarity: opponentBirdRef.current!.rarity,
                   rewards,
               });
-          }, 1500);
+          }, 1000);
       } else {
-          // Loss - report minimal/zero result
           onReportResults({
               winner: 'opponent',
               opponentRarity: opponentBirdRef.current.rarity,
@@ -346,22 +348,22 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                   opponentRarity: opponentBirdRef.current!.rarity,
                   rewards: { xp: 0, feathers: 0, scrap: 0, diamonds: 0 }
               });
-          }, 1500);
+          }, 1000);
       }
   };
 
   const handleFlee = () => {
       stopLoop();
-      // Exit without reporting results (no rewards, no loss penalty in stats)
       onBattleExit(false);
   };
 
-  // --- Resolve Minigame Logic (Unchanged from original) ---
   const resolveMinigame = (overrideProgress?: number) => {
       const check = skillCheckRef.current;
       if (!check) return;
+      
       skillCheckRef.current = null;
       setActiveSkillCheck(null);
+      
       const progress = overrideProgress !== undefined ? overrideProgress : check.progress;
       let multiplier = 1.0;
       let secondaryMultiplier = 0; 
@@ -382,19 +384,21 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           else secondaryMultiplier = 0.1; 
       } else if (check.type === SkillCheckType.DRAIN_GAME) {
           multiplier = check.storedMultiplier || 1.0; 
-          const dist = Math.abs(progress - 50);
-          if (dist < 5) secondaryMultiplier = 1.0; 
-          else if (dist < 15) secondaryMultiplier = 0.5; 
-          else secondaryMultiplier = 0.1; 
+          // Match visual zone at ~95%
+          if (progress >= 90 && progress <= 100) secondaryMultiplier = 1.5; 
+          else if (progress >= 75 && progress < 90) secondaryMultiplier = 1.2; 
+          else if (progress >= 55 && progress < 75) secondaryMultiplier = 1.0;
+          else secondaryMultiplier = 0.5; 
       }
+      
       let text = "GOOD";
       let color = "text-white";
       if (multiplier >= 1.5) { text = "PERFECT!"; color = "text-yellow-400"; }
       else if (multiplier < 0.8) { text = "WEAK"; color = "text-slate-500"; }
       
-      if (check.type === SkillCheckType.COMBO || check.type === SkillCheckType.DRAIN_GAME) {
-           if (secondaryMultiplier === 1.0) { text = "MAX DRAIN!"; color = "text-purple-400"; }
-           else if (secondaryMultiplier === 0.1) { text = "POOR ABSORB"; color = "text-slate-400"; }
+      if (check.type === SkillCheckType.DRAIN_GAME) {
+           if (secondaryMultiplier >= 1.5) { text = "MAX DRAIN!"; color = "text-purple-400"; }
+           else if (secondaryMultiplier < 1.0) { text = "POOR ABSORB"; color = "text-slate-400"; }
       }
       
       spawnFloatingText(text, 'opponent', 0, -50, color, 2);
@@ -413,10 +417,11 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           else if (progress >= 30 && progress <= 70) dmgMult = 1.2;
           else dmgMult = 0.8;
       } else if (check.type === SkillCheckType.DRAIN_GAME) {
-          if (progress >= 90) dmgMult = 1.5;
-          else if (progress >= 60) dmgMult = 1.2;
-          else if (progress >= 30) dmgMult = 1.0;
-          else dmgMult = 0.5;
+          // Inner target is at ~47% (120px)
+          if (progress >= 42 && progress <= 52) dmgMult = 1.5;
+          else if (progress >= 35 && progress <= 60) dmgMult = 1.2;
+          else if (progress >= 25 && progress <= 75) dmgMult = 1.0;
+          else dmgMult = 0.6;
       }
       const newCheck = {
           ...check,
@@ -428,7 +433,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       };
       skillCheckRef.current = newCheck;
       setActiveSkillCheck(newCheck);
-      spawnFloatingText(dmgMult >= 1.5 ? "POWER MAX!" : "CHARGED", 'opponent', 0, -80, "text-cyan-400", 1.5);
+      spawnFloatingText(dmgMult >= 1.5 ? "CRITICAL HIT!" : "CHARGED", 'opponent', 0, -80, "text-cyan-400", 1.5);
   };
 
   const processAI = (now: number) => {
@@ -463,8 +468,10 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           } else if (check.type === SkillCheckType.MASH) {
               if (check.progress >= 100) {
                    resolveMinigame(100);
+                   return;
               } else if (now - check.startTime > 3000) {
                   resolveMinigame(); 
+                  return;
               } else {
                   setActiveSkillCheck(prev => prev ? ({...prev, progress: Math.max(0, prev.progress - (0.12 * (delta/16)))}) : null);
               }
@@ -481,59 +488,53 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               });
           } else if (check.type === SkillCheckType.DRAIN_GAME) {
               if (check.stage === 1) {
-                  const speed = 2.0; 
-                  let p = check.progress + (speed * (delta/16)) * (check.direction || 1);
-                  if (p >= 100 || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1;
-                  check.progress = Math.max(0, Math.min(100, p));
+                  const speed = 0.3; 
+                  let p = check.progress - (speed * (delta/16));
+                  if (p <= 0) p = 100; 
+                  check.progress = p;
                   setActiveSkillCheck({...check});
               } else {
-                  const speed = 3.0;
-                  let p = check.progress + (speed * (delta/16)) * (check.direction || 1);
-                  if (p >= 100 || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1;
-                  check.progress = Math.max(0, Math.min(100, p));
+                  const speed = 0.4; 
+                  let p = check.progress + (speed * (delta/16));
+                  if (p >= 100) {
+                      resolveMinigame(100);
+                      return;
+                  }
+                  check.progress = Math.min(100, p);
                   setActiveSkillCheck({...check});
               }
           }
       }
       
-      // Increased bleed interval from 1000ms to 2000ms as requested
       if (now - lastBleedTickRef.current > 2000) {
           lastBleedTickRef.current = now;
-          
           let playerDied = false;
           let opponentDied = false;
 
-          // Player Bleed
           if (playerBirdRef.current?.statusEffects.includes('bleed')) {
               const dmg = Math.floor(playerBirdRef.current.maxHp * 0.05);
               const remaining = playerBirdRef.current.currentHp - dmg;
-              
               if (remaining <= 0) {
                   playerDied = true;
                   setPlayerBird(prev => prev ? ({...prev, currentHp: 0}) : null);
-                  handleWin('opponent');
               } else {
                   setPlayerBird(prev => prev ? ({...prev, currentHp: remaining}) : null);
                   spawnFloatingText("-BLEED", 'player', -30, 0, "text-rose-600");
               }
           }
 
-          // Opponent Bleed
           if (!winnerRef.current && !playerDied && opponentBirdRef.current?.statusEffects.includes('bleed')) {
               const dmg = Math.floor(opponentBirdRef.current.maxHp * 0.05);
               const remaining = opponentBirdRef.current.currentHp - dmg;
-
               if (remaining <= 0) {
                   opponentDied = true;
                   setOpponentBird(prev => prev ? ({...prev, currentHp: 0}) : null);
-                  handleWin('player');
               } else {
                   setOpponentBird(prev => prev ? ({...prev, currentHp: remaining}) : null);
                   spawnFloatingText("-BLEED", 'opponent', 30, 0, "text-rose-600");
               }
           }
 
-          // Vulture Passive
           const applyVulturePassive = (bird: BattleBird | null, setBird: React.Dispatch<React.SetStateAction<BattleBird | null>>) => {
               if (bird && bird.id === 'vulture') {
                   const heal = Math.ceil(bird.maxHp * 0.03); 
@@ -571,10 +572,9 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   const stopLoop = () => cancelAnimationFrame(animationFrameRef.current);
   
   const handleMove = (move: Move) => {
-      if (winner || activeSkillCheck || !playerBird || playerBird.currentEnergy < move.cost) return;
+      if (winnerRef.current || activeSkillCheck || !playerBird || playerBird.currentEnergy < move.cost) return;
       
       setPlayerBird(prev => prev ? ({...prev, currentEnergy: prev.currentEnergy - move.cost}) : null);
-      // Increment turn count
       setPlayerTurnCount(prev => prev + 1);
       
       triggerCooldown(move.id, move.cooldown);
@@ -591,7 +591,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               type: move.skillCheck, 
               move, 
               startTime: Date.now(), 
-              progress: move.skillCheck === SkillCheckType.TIMING ? 0 : 20, 
+              progress: move.skillCheck === SkillCheckType.DRAIN_GAME ? 100 : (move.skillCheck === SkillCheckType.TIMING ? 0 : 20), 
               direction: 1,
               stage: 1,
               reflexTargets
@@ -617,9 +617,14 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       } else if (check.type === SkillCheckType.COMBO || check.type === SkillCheckType.DRAIN_GAME) {
           if (check.stage === 1) {
               advanceComboStage();
-          } else {
-              resolveMinigame();
           }
+      }
+  };
+
+  const handleRelease = (e: React.PointerEvent) => {
+      const check = skillCheckRef.current;
+      if (check && check.type === SkillCheckType.DRAIN_GAME && check.stage === 2) {
+          resolveMinigame();
       }
   };
 
@@ -676,7 +681,6 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
            )}
        </AnimatePresence>
 
-       {/* Top Bar */}
        <BattleHeader 
             enemyLevel={enemyLevel}
             enemyPrefix={opponentBird.enemyPrefix}
@@ -687,7 +691,6 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
             onFlee={handleFlee}
        />
 
-       {/* Battle Stage */}
        <BattleStage 
             playerBird={playerBird}
             opponentBird={opponentBird}
@@ -697,7 +700,6 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
             particles={particles}
        />
 
-       {/* Controls */}
        <BattleControls 
             playerBird={playerBird} 
             lastUsedMap={lastUsedMap} 
@@ -705,14 +707,13 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
             disabled={!!winner || !!activeSkillCheck} 
        />
 
-       {/* Minigame Overlay */}
        <MinigameOverlay 
             activeSkillCheck={activeSkillCheck} 
             onMash={handleMash} 
+            onRelease={handleRelease}
             onReflexTap={handleReflexTap} 
        />
 
-       {/* Results Overlay */}
        <AnimatePresence>
            {resultData && (
                <BattleResultOverlay 
@@ -731,7 +732,6 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
            )}
        </AnimatePresence>
 
-       {/* Threat Details Modal */}
        <ThreatDetailsModal 
             isVisible={showThreatDetails}
             prefix={opponentBird.enemyPrefix || EnemyPrefix.NONE}
