@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { BirdInstance, BattleBird, Move, BattleLog, MoveType, Altitude, SkillCheckType, BattleResult, Rarity, ActiveBuff, Consumable, APShopState, ZoneClearReward, StatType } from '../types';
 import { RARITY_CONFIG } from '../constants';
@@ -131,7 +130,6 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     }
     setParticles(prev => [...prev, ...newParticles]);
     setTimeout(() => {
-      // Fix: Removed incorrect redundant setParticles call within setParticles functional update
       setParticles(current => current.filter(p => !newParticles.find(np => np.id === p.id)));
     }, 800);
   };
@@ -217,15 +215,19 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   const handleMove = (move: Move) => {
       const now = Date.now();
       if (winnerRef.current || activeSkillCheck || !playerBird || playerBird.currentEnergy < move.cost || now < (lastUsedMap[move.id] || 0)) return;
-      setPlayerBird(prev => ({...prev!, currentEnergy: prev!.currentEnergy - move.cost}));
+      
+      setPlayerBird(prev => prev ? ({...prev, currentEnergy: prev.currentEnergy - move.cost}) : null);
       setPlayerTurnCount(p => p + 1);
+      
       if (move.skillCheck && move.skillCheck !== SkillCheckType.NONE) {
-          const check: ActiveSkillCheck = { type: move.skillCheck, move, startTime: now, progress: 20 };
+          const check: ActiveSkillCheck = { type: move.skillCheck, move, startTime: now, progress: 0 };
           skillCheckRef.current = check;
           setActiveSkillCheck(check);
       } else {
           triggerCooldown(move.id, move.cooldown);
-          if (playerBirdRef.current && opponentBirdRef.current) executeMove(playerBirdRef.current, opponentBirdRef.current, move, true, 1.0);
+          if (playerBirdRef.current && opponentBirdRef.current) {
+              executeMove(playerBirdRef.current, opponentBirdRef.current, move, true, 1.0);
+          }
       }
   };
 

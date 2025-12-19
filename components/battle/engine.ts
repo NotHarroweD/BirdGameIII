@@ -14,13 +14,11 @@ export const applyPassivesAndRegen = (
         let newHp = bird.currentHp;
         let newEnergy = bird.currentEnergy;
         
-        // Passives
         if (bird.id === 'vulture') {
-            newHp = Math.min(bird.maxHp, newHp + Math.ceil(bird.maxHp * 0.03));
-            newEnergy = Math.min(bird.maxEnergy, newEnergy + 10);
+            newHp = Math.min(bird.maxHp, newHp + (bird.maxHp * 0.003 * factor));
+            newEnergy = Math.min(bird.maxEnergy, newEnergy + (1.5 * factor));
         }
         
-        // Energy Regen
         const regenRate = bird.id === 'hummingbird' ? 7.5 : 5;
         newEnergy = Math.min(bird.maxEnergy, newEnergy + (regenRate * factor));
         

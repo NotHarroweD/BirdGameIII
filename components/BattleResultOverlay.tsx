@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { BirdInstance, Rarity, Gem, Consumable, EnemyPrefix, StatType, StatOption } from '../types';
 import { RARITY_CONFIG, XP_TABLE } from '../constants';
@@ -155,7 +154,6 @@ export const BattleResultOverlay: React.FC<{
         if (onApplyLevelUpReward) {
             onApplyLevelUpReward(initialBird.instanceId, option.stat, option.value);
         }
-        // Logic to keep modal open if multiple points exist
         if (updatedBird && updatedBird.statPoints <= 1) {
             setRewardsClaimed(true);
             setShowLevelUpRewards(false);
@@ -175,19 +173,17 @@ export const BattleResultOverlay: React.FC<{
             return;
         }
 
-        const countDelay = 1000; 
-        
+        const countDelay = 50; 
         const startXP = initialBird.xp;
         const endXP = initialBird.xp + rewards.xp;
         const maxXP = initialBird.xpToNextLevel;
-        
         const initialPercent = Math.min(100, (startXP / maxXP) * 100);
         setXpBarWidth(initialPercent);
         setDisplayCurrentXp(startXP);
 
         let animationFrameId: number;
         let startTime: number;
-        const duration = 1500; 
+        const duration = 250; 
 
         const startCounting = () => {
             startTime = Date.now();
@@ -211,7 +207,7 @@ export const BattleResultOverlay: React.FC<{
                     animationFrameId = requestAnimationFrame(animate);
                 } else {
                     setShowLoot(true);
-                    setTimeout(() => setShowButtons(true), 300);
+                    setShowButtons(true);
                 }
             };
             animationFrameId = requestAnimationFrame(animate);
@@ -269,7 +265,7 @@ export const BattleResultOverlay: React.FC<{
             <motion.div 
                 initial={{ scale: 0.5, opacity: 0 }} 
                 animate={{ scale: 1, opacity: 1 }} 
-                transition={{ type: "spring", duration: 0.5, bounce: 0.3 }}
+                transition={{ type: "spring", duration: 0.3, bounce: 0.2 }}
                 className={`w-full max-w-sm bg-slate-900 border-2 p-1 rounded-2xl relative overflow-hidden flex flex-col items-center shadow-2xl max-h-[90vh] ${isVictory ? 'border-cyan-500 shadow-cyan-500/30' : 'border-rose-500 shadow-rose-500/30'}`}
             >
                 <div className="bg-slate-950/80 w-full h-full rounded-xl p-5 flex flex-col items-center gap-4 relative overflow-y-auto">
@@ -288,7 +284,7 @@ export const BattleResultOverlay: React.FC<{
                         <motion.div
                             initial={{ scale: 3, opacity: 0, y: -50 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
-                            transition={{ type: "spring", stiffness: 300, damping: 12, delay: 0.1 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 12 }}
                         >
                             <h2 className={`font-tech text-6xl font-black italic tracking-tighter mb-1 ${isVictory ? 'text-transparent bg-clip-text bg-gradient-to-b from-white via-cyan-200 to-cyan-500 drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]' : 'text-rose-500 drop-shadow-[0_0_10px_rgba(244,63,94,0.5)]'}`}>
                                 {isVictory ? 'VICTORY' : 'DEFEAT'}
@@ -298,14 +294,13 @@ export const BattleResultOverlay: React.FC<{
                         <motion.div 
                             initial={{ opacity: 0, width: 0 }} 
                             animate={{ opacity: 1, width: '100%' }} 
-                            transition={{ delay: 0.3, duration: 0.3 }}
+                            transition={{ duration: 0.2 }}
                             className="h-px bg-gradient-to-r from-transparent via-slate-500 to-transparent w-full mb-2" 
                         />
                         
                         <motion.div
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.4 }}
                             className="text-slate-400 text-xs font-mono uppercase tracking-[0.3em]"
                         >
                             {isVictory ? 'MISSION ACCOMPLISHED' : 'CRITICAL FAILURE'}
@@ -317,7 +312,7 @@ export const BattleResultOverlay: React.FC<{
                             <motion.div 
                                 initial={{ scaleX: 0, opacity: 0 }}
                                 animate={{ scaleX: 1, opacity: 1 }}
-                                transition={{ delay: 0.5, duration: 0.4 }}
+                                transition={{ duration: 0.2 }}
                                 className={`p-3 rounded-lg border relative overflow-hidden group shadow-lg transition-all duration-300 ${isSpecialXp ? 'bg-cyan-900/40 border-cyan-500/50 shadow-cyan-500/20' : 'bg-slate-900 border-slate-800'} ${isLevelUp ? 'min-h-[120px] flex flex-col justify-center' : ''}`}
                             >
                                 <div className="flex justify-between items-center mb-1 relative z-10">
@@ -368,7 +363,6 @@ export const BattleResultOverlay: React.FC<{
                                  <motion.div 
                                     initial={{ x: -20, opacity: 0 }}
                                     animate={{ x: 0, opacity: 1 }}
-                                    transition={{ delay: 0.6 }}
                                     className={`p-3 rounded-lg border flex flex-col items-center shadow-md relative overflow-hidden ${isSpecialFeathers ? 'bg-yellow-900/30 border-yellow-500/50 shadow-yellow-500/20' : 'bg-slate-900/80 border-slate-800'}`}
                                 >
                                      {isSpecialFeathers && <div className="absolute inset-0 bg-yellow-500/5 animate-pulse" />}
@@ -386,7 +380,6 @@ export const BattleResultOverlay: React.FC<{
                                  <motion.div 
                                     initial={{ x: 20, opacity: 0 }}
                                     animate={{ x: 0, opacity: 1 }}
-                                    transition={{ delay: 0.7 }}
                                     className={`p-3 rounded-lg border flex flex-col items-center shadow-md relative overflow-hidden ${isSpecialScrap ? 'bg-slate-800 border-slate-400 shadow-slate-400/20' : 'bg-slate-900/80 border-slate-800'}`}
                                 >
                                      {isSpecialScrap && <div className="absolute inset-0 bg-white/5 animate-pulse" />}
@@ -431,7 +424,7 @@ export const BattleResultOverlay: React.FC<{
                                                     borderColor={RARITY_CONFIG[rewards.gem.rarity].borderColor}
                                                     bgColor="bg-slate-900/80"
                                                     textColor={RARITY_CONFIG[rewards.gem.rarity].color}
-                                                    delay={0.1}
+                                                    delay={0.05}
                                                     isBonus={isSpecialGem}
                                                 />
                                             )}
@@ -446,7 +439,7 @@ export const BattleResultOverlay: React.FC<{
                                                     borderColor={RARITY_CONFIG[rewards.consumable.rarity].borderColor}
                                                     bgColor="bg-slate-900/80"
                                                     textColor={RARITY_CONFIG[rewards.consumable.rarity].color}
-                                                    delay={0.2}
+                                                    delay={0.1}
                                                     isBonus={isSpecialItem}
                                                 />
                                             )}
@@ -458,7 +451,6 @@ export const BattleResultOverlay: React.FC<{
                             <motion.div 
                                 initial={{ opacity: 0, y: 20 }} 
                                 animate={{ opacity: 1, y: 0 }} 
-                                transition={{ delay: 0.8 }}
                                 className="w-full bg-slate-900 p-2 rounded border border-slate-800 flex flex-col items-center gap-1 mt-auto"
                             >
                                  <div className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Zone Progress</div>
@@ -511,7 +503,7 @@ export const BattleResultOverlay: React.FC<{
                         onClick={(e) => e.stopPropagation()}
                     >
                         <motion.div 
-                            initial={{ scale: 0.9, y: 50 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 50 }}
+                            initial={{ scale: 0.9, y: 50 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
                             className="bg-slate-900 border-2 border-yellow-500/50 p-6 rounded-2xl max-w-sm w-full relative flex flex-col items-center shadow-[0_0_50px_rgba(234,179,8,0.2)] max-h-[80vh] overflow-y-auto custom-scrollbar"
                         >
                             <div className="w-full flex items-center justify-center gap-2 mb-2 shrink-0">

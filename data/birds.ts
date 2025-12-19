@@ -160,7 +160,7 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
       { id: 'acid_puke', name: 'Acid Bile', description: 'Corrosive attack.', type: MoveType.ATTACK, power: 25, cost: 15, accuracy: 90, cooldown: 1500, skillCheck: SkillCheckType.MASH },
       { id: 'harden', name: 'Harden', description: 'Toughen skin.', type: MoveType.DEFENSE, power: 0, cost: 15, accuracy: 100, cooldown: 3000, skillCheck: SkillCheckType.REFLEX },
       { id: 'carrion_feast', name: 'Carrion Feast', description: 'Drain life from enemy.', type: MoveType.DRAIN, power: 40, cost: 35, accuracy: 95, cooldown: 4500, skillCheck: SkillCheckType.DRAIN_GAME },
-      { id: 'bone_drop', name: 'Bone Drop', description: 'Drop from height.', type: MoveType.SPECIAL, power: 60, cost: 45, accuracy: 85, requiresHeight: true, cooldown: 6000 }
+      { id: 'bone_drop', name: 'Bone Drop', description: 'Drop from height.', type: MoveType.SPECIAL, power: 60, cost: 45, accuracy: 85, requiresHeight: true, cooldown: 6000, skillCheck: SkillCheckType.TIMING }
     ],
     huntingConfig: {
       baseRate: 0.8,
