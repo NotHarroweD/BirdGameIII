@@ -164,7 +164,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     lastUsedMapRef.current = { ...lastUsedMapRef.current, [id]: now };
   };
 
-  const executeMove = async (attacker: BattleBird, defender: BattleBird, move: Move, isPlayer: boolean, multiplier: number, secondaryMultiplier: number = 0) => {
+  const executeMove = async (attacker: BattleBird, defender: BattleBird, move: Move, isPlayer: boolean, multiplier: number, secondaryMultiplier: number = 0, damageColorOverride?: string) => {
     if (winnerRef.current) return;
     
     const anim = isPlayer ? playerAnim : opponentAnim;
@@ -184,10 +184,10 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     const attackerTarget = isPlayer ? 'player' : 'opponent';
     const defenderTarget = isPlayer ? 'opponent' : 'player';
 
-    const queueText = (text: string, target: 'player' | 'opponent', color: string, scale: number, delay: number, xOffset = 0) => {
+    const queueText = (text: string, target: 'player' | 'opponent', color: string, scale: number, delay: number, xOffset = 0, yOffset = 0) => {
         setTimeout(() => {
             if (winnerRef.current) return;
-            spawnFloatingText(text, target, xOffset + (Math.random() * 20 - 10), (Math.random() * 20), color, scale);
+            spawnFloatingText(text, target, xOffset + (Math.random() * 20 - 10), yOffset + (Math.random() * 20), color, scale);
         }, delay);
     };
 
@@ -201,12 +201,12 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                 if (isPlayer) playerBirdRef.current = next; else opponentBirdRef.current = next;
                 return next;
             });
-            queueText(`+${healAmount} HP`, attackerTarget, "text-emerald-400", 1.5, 0);
+            queueText(`+${healAmount} HP`, attackerTarget, "text-emerald-400", 1.5, 0, 0, -40);
             addLog(`${attacker.name} heals for ${healAmount}.`, 'heal');
 
         } else if (move.type === MoveType.DEFENSE) {
              addLog(`${attacker.name} braces for impact!`, 'info');
-             queueText("SHIELD UP", attackerTarget, "text-cyan-400", 1.2, 0);
+             queueText("SHIELD UP", attackerTarget, "text-cyan-400", 1.2, 0, 0, -40);
 
         } else {
             let finalDamage = outcome.damage;
@@ -219,7 +219,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                     if (isPlayer) playerBirdRef.current = next; else opponentBirdRef.current = next;
                     return next;
                  });
-                 queueText(`+${healAmt} HP (DRAIN)`, attackerTarget, "text-purple-400", 1.2, 500, 40);
+                 queueText(`+${healAmt} HP (DRAIN)`, attackerTarget, "text-purple-400", 1.2, 500, 40, -20);
             }
             
             setDefender((prev: BattleBird | null) => {
@@ -240,15 +240,15 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
 
             let delayOffset = 0;
             if (outcome.isCrit) {
-                queueText("CRITICAL!", defenderTarget, "text-yellow-400", 1.8, delayOffset, 0);
+                queueText("CRITICAL!", defenderTarget, "text-yellow-400", 1.8, delayOffset, -50, -60);
                 delayOffset += 200;
             }
             
-            queueText(`-${finalDamage}`, defenderTarget, "text-rose-500", 2.5, delayOffset, 0);
+            queueText(`-${finalDamage}`, defenderTarget, damageColorOverride || "text-rose-500", 2.5, delayOffset, 50, 40);
             delayOffset += 200;
             
             if (outcome.appliedBleed) {
-                queueText("BLEED APPLIED", defenderTarget, "text-rose-600", 1.2, delayOffset, 0);
+                queueText("BLEED APPLIED", defenderTarget, "text-rose-600", 1.2, delayOffset, 0, -80);
             }
             
             spawnParticles(0, 0, "#f43f5e", 12);
@@ -256,13 +256,13 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
         }
     } else {
         if (defender.speed > attacker.speed && Math.random() < 0.5) {
-             queueText("DODGED!", defenderTarget, "text-cyan-400", 1.5, 0);
+             queueText("DODGED!", defenderTarget, "text-cyan-400", 1.5, 0, 0, -40);
              const dodgeAnim = isPlayer ? opponentAnim : playerAnim;
              dodgeAnim.start({ x: isPlayer ? 50 : -50, transition: { duration: 0.2 } }).then(() => {
                  dodgeAnim.start({ x: 0, transition: { duration: 0.2 } });
              });
         } else {
-             queueText("MISS", defenderTarget, "text-slate-500", 1.5, 0);
+             queueText("MISS", defenderTarget, "text-slate-500", 1.5, 0, 0, -40);
         }
     }
   };
@@ -404,9 +404,21 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
            else if (secondaryMultiplier < 1.0) { text = "POOR ABSORB"; color = "text-slate-400"; }
       }
       
-      spawnFloatingText(text, 'opponent', 0, -50, color, 2);
+      spawnFloatingText(text, 'opponent', -50, -80, color, 2);
+
+      const finalCooldown = multiplier >= 1.2 ? check.move.cooldown / 2 : check.move.cooldown;
+      triggerCooldown(check.move.id, finalCooldown);
+
+      let damageColor = undefined;
+      if (check.type === SkillCheckType.COMBO) {
+          if (multiplier >= 1.5) damageColor = "text-purple-400";
+          else if (multiplier >= 1.0) damageColor = "text-blue-400";
+          else if (multiplier >= 0.4) damageColor = "text-emerald-400";
+          else damageColor = "text-white";
+      }
+
       if (playerBirdRef.current && opponentBirdRef.current) {
-          executeMove(playerBirdRef.current, opponentBirdRef.current, check.move, true, multiplier, secondaryMultiplier);
+          executeMove(playerBirdRef.current, opponentBirdRef.current, check.move, true, multiplier, secondaryMultiplier, damageColor);
       }
   };
 
@@ -668,7 +680,6 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       });
       setPlayerTurnCount(prev => prev + 1);
       
-      triggerCooldown(move.id, move.cooldown);
       if (move.skillCheck && move.skillCheck !== SkillCheckType.NONE) {
           let reflexTargets = undefined;
           if (move.skillCheck === SkillCheckType.REFLEX) {
@@ -699,6 +710,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           skillCheckRef.current = check;
           setActiveSkillCheck(check);
       } else {
+          triggerCooldown(move.id, move.cooldown);
           if (playerBirdRef.current && opponentBirdRef.current) {
               executeMove(playerBirdRef.current, opponentBirdRef.current, move, true, 1.0);
           }
@@ -754,8 +766,11 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           else if (avgValue >= 30) { multiplier = 1.2; text = "GOOD"; color = "text-cyan-400"; } 
           else { multiplier = 0.8; text = "SLOW"; color = "text-slate-400"; }
 
-          spawnFloatingText(text, 'opponent', 0, -50, color, 2);
+          spawnFloatingText(text, 'opponent', -50, -80, color, 2);
           
+          const finalCooldown = multiplier >= 1.2 ? check.move.cooldown / 2 : check.move.cooldown;
+          triggerCooldown(check.move.id, finalCooldown);
+
           skillCheckRef.current = null;
           setActiveSkillCheck(null);
           if (playerBirdRef.current && opponentBirdRef.current) {
