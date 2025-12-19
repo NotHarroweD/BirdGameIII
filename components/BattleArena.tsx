@@ -399,10 +399,13 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           secondaryMultiplier = 0; 
       } else if (check.type === SkillCheckType.DRAIN_GAME) {
           multiplier = check.storedMultiplier || 1.0; 
-          if (progress >= 90 && progress <= 100) secondaryMultiplier = 1.5; 
-          else if (progress >= 75 && progress < 90) secondaryMultiplier = 1.2; 
-          else if (progress >= 55 && progress < 75) secondaryMultiplier = 1.0;
-          else secondaryMultiplier = 0.5; 
+          if (check.drainBones) {
+              const collected = check.drainBones.filter(h => h.collected);
+              const totalVal = collected.reduce((sum, h) => sum + (h.value / 100), 0);
+              secondaryMultiplier = Math.min(1.0, totalVal / check.drainBones.length);
+          } else {
+            secondaryMultiplier = 0.25;
+          }
       } else if (check.type === SkillCheckType.FLICK) {
           multiplier = finalMultiplier || 1.0;
       }
@@ -413,8 +416,9 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       else if (multiplier < 0.8) { text = "WEAK"; color = "text-slate-500"; }
       
       if (check.type === SkillCheckType.DRAIN_GAME) {
-           if (secondaryMultiplier >= 1.5) { text = "MAX DRAIN!"; color = "text-purple-400"; }
-           else if (secondaryMultiplier < 1.0) { text = "POOR ABSORB"; color = "text-slate-400"; }
+           if (secondaryMultiplier >= 0.8) { text = "MAX DRAIN!"; color = "text-purple-400"; }
+           else if (secondaryMultiplier < 0.3) { text = "POOR ABSORB"; color = "text-slate-400"; }
+           else { text = "SOUL FEAST"; color = "text-purple-300"; }
       }
       
       spawnFloatingText(text, 'opponent', -50, -100, color, 2);
@@ -444,24 +448,6 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       const progress = check.progress;
 
       if (check.type === SkillCheckType.DRAIN_GAME) {
-          if (check.stage !== 1) return;
-          let dmgMult = 1.0;
-          if (progress >= 42 && progress <= 52) dmgMult = 1.5;
-          else if (progress >= 35 && progress <= 60) dmgMult = 1.2;
-          else if (progress >= 25 && progress <= 75) dmgMult = 1.0;
-          else dmgMult = 0.6;
-          
-          const newCheck = {
-              ...check,
-              stage: 2,
-              storedMultiplier: dmgMult,
-              startTime: Date.now(),
-              progress: 0,
-              direction: 1 as 1 | -1
-          };
-          skillCheckRef.current = newCheck;
-          setActiveSkillCheck(newCheck);
-          spawnFloatingText(dmgMult >= 1.5 ? "CRITICAL HIT!" : "CHARGED", 'opponent', 0, -80, "text-cyan-400", 1.5);
       } else if (check.type === SkillCheckType.COMBO) {
           const targetStart = check.targetZoneStart ?? 40;
           const targetWidth = check.targetZoneWidth ?? 38;
@@ -568,8 +554,10 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           } else if (check.type === SkillCheckType.MASH) {
               if (check.progress >= 100) {
                    resolveMinigame(100);
+                   return; 
               } else if (now - check.startTime > 3000) {
                   resolveMinigame(); 
+                  return;
               } else {
                   check.progress = Math.max(0, check.progress - (0.12 * physicsMult));
                   setActiveSkillCheck({...check});
@@ -584,21 +572,57 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               setActiveSkillCheck({...check});
           } else if (check.type === SkillCheckType.DRAIN_GAME) {
               if (check.stage === 1) {
-                  const speed = 0.3; 
-                  let p = check.progress - (speed * physicsMult);
-                  if (p <= 0) p = 100; 
-                  check.progress = p;
+                  // Wait 400ms before starting the charge to give player a moment to react
+                  const elapsedSinceStart = now - check.startTime;
+                  if (elapsedSinceStart > 400 && check.flickStartPos) {
+                      const chargeSpeed = 6.0; 
+                      const nextProgress = Math.min(100, check.progress + (chargeSpeed * physicsMult));
+                      check.progress = nextProgress;
+                      
+                      if (nextProgress >= 100) {
+                          check.stage = 2;
+                          check.storedMultiplier = 1.5; 
+                          check.startTime = Date.now(); 
+                          spawnFloatingText("PERFECT!", 'player', 0, -100, "text-yellow-400", 1.5);
+                      }
+                  }
+
+                  if (Math.random() < 0.25 && (check.drainBones?.length || 0) < 20) {
+                      const angle = Math.random() * Math.PI * 2;
+                      const speed = 1.5 + Math.random() * 2;
+                      const bone = {
+                          id: Date.now() + Math.random(),
+                          x: 50,
+                          y: 50,
+                          vx: Math.cos(angle) * speed,
+                          vy: Math.sin(angle) * speed,
+                          collected: false,
+                          value: 100
+                      };
+                      check.drainBones = [...(check.drainBones || []), bone];
+                  }
+                  
+                  if (check.drainBones) {
+                      check.drainBones = check.drainBones.map(h => ({
+                          ...h,
+                          x: Math.max(35, Math.min(65, h.x + h.vx * 0.1 * physicsMult)),
+                          y: Math.max(40, Math.min(60, h.y + h.vy * 0.1 * physicsMult))
+                      }));
+                  }
                   setActiveSkillCheck({...check});
               } else {
-                  const speed = 0.4; 
-                  let p = check.progress + (speed * physicsMult);
-                  if (p >= 100) {
-                      resolveMinigame(100);
-                      return;
-                  } else {
-                    check.progress = Math.min(100, p);
-                    setActiveSkillCheck({...check});
+                  if (check.drainBones) {
+                      check.drainBones = check.drainBones.map(h => ({
+                          ...h,
+                          value: h.collected ? h.value : Math.max(0, h.value - (0.8 * physicsMult))
+                      }));
                   }
+                  
+                  if (now - check.startTime > 2500 || (check.drainBones?.length && check.drainBones.every(h => h.collected || h.value <= 0))) {
+                      resolveMinigame();
+                      return;
+                  }
+                  setActiveSkillCheck({...check});
               }
           } else if (check.type === SkillCheckType.FLICK) {
                if (now - check.startTime > 1200 && !check.isFlashing) {
@@ -723,7 +747,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               type: move.skillCheck, 
               move, 
               startTime: Date.now(), 
-              progress: isSonic ? 50 : (move.skillCheck === SkillCheckType.DRAIN_GAME ? 100 : (move.skillCheck === SkillCheckType.TIMING ? 0 : 20)), 
+              progress: isSonic ? 50 : (move.skillCheck === SkillCheckType.DRAIN_GAME ? 0 : (move.skillCheck === SkillCheckType.TIMING ? 0 : 20)), 
               direction: 1,
               stage: 1,
               reflexTargets,
@@ -735,7 +759,11 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               hitMarkers: [],
               isFlashing: false,
               isMovingZone: isSonic,
-              flickDirection: move.skillCheck === SkillCheckType.FLICK ? Math.floor(Math.random() * 4) * 90 : undefined 
+              flickDirection: move.skillCheck === SkillCheckType.FLICK ? Math.floor(Math.random() * 4) * 90 : undefined,
+              drainBones: move.skillCheck === SkillCheckType.DRAIN_GAME ? [] : undefined,
+              storedMultiplier: undefined,
+              flickStartPos: undefined,
+              flickCurrentPos: undefined
           };
           
           lastFrameTimeRef.current = Date.now();
@@ -757,8 +785,13 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       if (check.type === SkillCheckType.REFLEX) return;
 
       if (check.type === SkillCheckType.MASH) {
-          check.progress = Math.min(100, check.progress + 8);
-          setActiveSkillCheck({...check});
+          const newProgress = Math.min(100, check.progress + 8);
+          check.progress = newProgress;
+          if (newProgress >= 100) {
+              resolveMinigame(100);
+          } else {
+              setActiveSkillCheck({...check});
+          }
       } else if (check.type === SkillCheckType.TIMING) {
           if (check.isMovingZone) {
               const targetMid = (check.targetZoneStart || 40) + (check.targetZoneWidth || 32) / 2;
@@ -785,7 +818,18 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               resolveMinigame();
           }
       } else if (check.type === SkillCheckType.COMBO || check.type === SkillCheckType.DRAIN_GAME) {
-          advanceComboStage();
+          if (check.type === SkillCheckType.DRAIN_GAME) {
+              if (check.stage === 1) {
+                  check.flickStartPos = { x: e.clientX, y: e.clientY };
+                  setActiveSkillCheck({...check});
+              } else if (check.stage === 2) {
+                  if (!check.drainBones || check.drainBones.length === 0 || check.drainBones.every(b => b.collected || b.value <= 0)) {
+                      resolveMinigame(); 
+                  }
+              }
+          } else {
+              advanceComboStage();
+          }
       } else if (check.type === SkillCheckType.FLICK) {
           check.flickStartPos = { x: e.clientX, y: e.clientY };
           check.flickCurrentPos = { x: e.clientX, y: e.clientY };
@@ -795,9 +839,35 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
 
   const handlePointerMove = (e: React.PointerEvent) => {
       const check = skillCheckRef.current;
-      if (check && check.type === SkillCheckType.FLICK && check.flickStartPos) {
+      if (!check) return;
+
+      if (check.type === SkillCheckType.FLICK && check.flickStartPos) {
           check.flickCurrentPos = { x: e.clientX, y: e.clientY };
           setActiveSkillCheck({...check});
+      } else if (check.type === SkillCheckType.DRAIN_GAME) {
+          if (check.stage === 2 && check.drainBones) {
+              const container = document.querySelector('.minigame-container');
+              if (container && playerBirdRef.current) {
+                  const rect = container.getBoundingClientRect();
+                  const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+                  const yPct = ((e.clientY - rect.top) / rect.height) * 100;
+                  
+                  check.drainBones = check.drainBones.map(h => {
+                      if (h.collected) return h;
+                      const dx = xPct - h.x;
+                      const dy = yPct - h.y;
+                      const dist = Math.sqrt(dx * dx + dy * dy);
+                      if (dist < 10) { 
+                          spawnParticles(e.clientX, e.clientY, "#ffffff", 5);
+                          const baseHealPerBone = Math.ceil((playerBirdRef.current!.attack * check.move.power / 100) * 0.1 * (h.value / 100));
+                          spawnFloatingText(`+${baseHealPerBone} HP`, 'player', e.clientX - rect.left - rect.width/2, e.clientY - rect.top - rect.height/2, "text-emerald-400", 1.2);
+                          return { ...h, collected: true };
+                      }
+                      return h;
+                  });
+                  setActiveSkillCheck({...check});
+              }
+          }
       }
   };
 
@@ -805,8 +875,19 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       const check = skillCheckRef.current;
       if (!check) return;
 
-      if (check.type === SkillCheckType.DRAIN_GAME && check.stage === 2) {
-          resolveMinigame();
+      if (check.type === SkillCheckType.DRAIN_GAME) {
+          if (check.stage === 1) {
+              let mult = 0.5;
+              if (check.progress >= 95) mult = 1.5;
+              else if (check.progress >= 80) mult = 1.2;
+              else if (check.progress >= 50) mult = 1.0;
+              
+              check.stage = 2;
+              check.storedMultiplier = mult;
+              check.startTime = Date.now(); 
+              setActiveSkillCheck({...check});
+              spawnFloatingText(mult >= 1.5 ? "PERFECT!" : mult >= 1.0 ? "GOOD" : "WEAK", 'player', 0, -100, mult >= 1.5 ? "text-yellow-400" : "text-white");
+          }
       } else if (check.type === SkillCheckType.FLICK && check.flickStartPos) {
           const start = check.flickStartPos;
           const dx = e.clientX - start.x;
@@ -895,7 +976,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   if (!opponentBird || !playerBird) return <div className="h-screen bg-slate-950 flex items-center justify-center text-white">INITIALIZING COMBAT...</div>;
 
   return (
-    <div className="h-[100dvh] w-full bg-slate-950 relative overflow-hidden flex flex-col font-sans">
+    <div className="h-[100dvh] w-full bg-slate-950 relative overflow-hidden flex flex-col font-sans minigame-container">
        <AnimatePresence>
            {hitFlash && (
                <motion.div 

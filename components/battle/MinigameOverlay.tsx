@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SkillCheckType, MoveType } from '../../types';
-import { Heart, Shield, Zap, Sparkles, MoveUp, MoveDown, MoveLeft, MoveRight } from 'lucide-react';
+import { Heart, Shield, Zap, Sparkles, MoveUp, MoveDown, MoveLeft, MoveRight, Fingerprint, Bone } from 'lucide-react';
 import { ActiveSkillCheck } from './types';
 import { getReflexColor } from './utils';
 
@@ -113,19 +113,91 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                         })}
                     </div>
                 ) : activeSkillCheck.type === SkillCheckType.DRAIN_GAME ? (
-                    <div className="flex flex-col items-center gap-12">
-                         <div className="text-white font-tech text-4xl font-black animate-pulse uppercase tracking-widest text-center px-4 drop-shadow-[0_0_15px_rgba(192,132,252,0.8)]">
-                            {activeSkillCheck.stage === 1 ? "PRESS & HOLD" : "RELEASE AT TARGET"}
+                    <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center overflow-hidden">
+                         <div className="absolute top-12 w-full text-center z-10 px-6">
+                            <h2 className="text-white font-tech text-4xl font-black italic animate-pulse drop-shadow-[0_0_15px_rgba(168,85,247,0.8)]">
+                                {activeSkillCheck.stage === 1 ? "HOLD TO CONSUME" : "SWIPE TO FEAST"}
+                            </h2>
+                            <p className="text-purple-400 font-bold uppercase tracking-widest text-sm mt-2">
+                                {activeSkillCheck.stage === 1 ? "Hold until full for max damage" : "Quickly drag over bones to heal!"}
+                            </p>
                         </div>
 
-                        <div className="relative w-64 h-64 flex items-center justify-center">
-                            <div className={`w-24 h-24 rounded-full border-4 flex items-center justify-center bg-slate-900 shadow-2xl relative z-20 ${activeSkillCheck.stage === 2 ? 'border-purple-400' : 'border-slate-700'}`}>
-                                <Zap size={40} className={activeSkillCheck.stage === 2 ? 'text-purple-400 animate-pulse' : 'text-slate-600'} />
+                        {/* Bones Section Area */}
+                        <div className="absolute inset-0 pointer-events-none">
+                            {activeSkillCheck.drainBones?.map(h => (
+                                <motion.div 
+                                    key={h.id}
+                                    className="absolute"
+                                    animate={{ 
+                                        scale: h.collected ? [1.2, 1.8, 0] : 1,
+                                        opacity: h.collected ? [1, 1, 0] : (h.value / 100) * 0.9 + 0.1
+                                    }}
+                                    transition={{ duration: h.collected ? 0.3 : 0 }}
+                                    style={{ 
+                                        left: `${h.x}%`, 
+                                        top: `${h.y}%`, 
+                                        transform: 'translate(-50%, -50%)',
+                                        zIndex: h.collected ? 40 : 20
+                                    }}
+                                >
+                                    <div className="relative w-14 h-14 flex items-center justify-center">
+                                        {!h.collected && (
+                                            <div 
+                                                className="absolute inset-0 rounded-full border-2 border-slate-700/50"
+                                                style={{ background: `conic-gradient(#ffffff ${h.value}%, transparent 0)` }}
+                                            />
+                                        )}
+                                        <Bone size={32} className={h.collected ? "text-emerald-400" : "text-slate-300 drop-shadow-lg"} />
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
+
+                        {/* Central Button (Only visible/active in Phase 1) */}
+                        {activeSkillCheck.stage === 1 && (
+                            <div className="relative w-56 h-56 flex items-center justify-center z-30">
+                                <motion.div 
+                                    animate={{ scale: [1, 1.1, 1], rotate: -360 }}
+                                    transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+                                    className={`absolute inset-0 rounded-full border-4 border-dashed ${activeSkillCheck.progress >= 95 ? 'border-emerald-500/50' : 'border-purple-500/20'}`}
+                                />
+                                
+                                <div className="absolute inset-[-12px] rounded-full border-[10px] border-slate-900 shadow-2xl">
+                                    <div 
+                                        className="absolute inset-[-4px] rounded-full transition-all duration-150"
+                                        style={{ 
+                                            background: `conic-gradient(${activeSkillCheck.progress >= 95 ? '#10b981' : '#a855f7'} ${activeSkillCheck.progress}%, #1e1b4b 0)`,
+                                            boxShadow: activeSkillCheck.progress >= 95 ? '0 0 35px rgba(16,185,129,0.7)' : 'none'
+                                        }}
+                                    />
+                                </div>
+
+                                <motion.div 
+                                    className="w-36 h-36 rounded-full bg-slate-900 border-4 border-purple-500/50 flex flex-col items-center justify-center shadow-[0_0_50px_rgba(168,85,247,0.5)] relative"
+                                >
+                                    <Fingerprint size={56} className={activeSkillCheck.progress >= 95 ? "text-emerald-400" : "text-purple-400"} />
+                                    <div className="text-[12px] font-black text-white uppercase mt-1 tracking-widest">
+                                        {activeSkillCheck.progress >= 95 ? "FULL!" : "HOLD"}
+                                    </div>
+                                </motion.div>
                             </div>
-                            <motion.div 
-                                className={`absolute rounded-full border-4 shadow-xl z-10 ${activeSkillCheck.stage === 1 ? 'border-white' : 'border-purple-400'}`}
-                                style={{ width: `${activeSkillCheck.progress}%`, height: `${activeSkillCheck.progress}%`, opacity: 0.8 }}
-                            />
+                        )}
+                        
+                        <div className="absolute bottom-12 w-full text-center">
+                            {activeSkillCheck.stage === 2 && (
+                                <motion.div 
+                                    initial={{ y: 50, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    className="inline-block bg-slate-900/80 border-2 border-purple-500/50 px-8 py-3 rounded-full backdrop-blur-md shadow-[0_0_30px_rgba(168,85,247,0.3)]"
+                                >
+                                    <div className="text-xs font-bold text-purple-300 uppercase tracking-widest mb-1">HARVEST ACTIVE</div>
+                                    <div className="text-3xl font-tech font-black text-white flex items-center justify-center gap-3">
+                                        <Bone size={24} className="text-slate-400" />
+                                        {activeSkillCheck.drainBones?.filter(h => h.collected).length || 0} / {activeSkillCheck.drainBones?.length || 0}
+                                    </div>
+                                </motion.div>
+                            )}
                         </div>
                     </div>
                 ) : activeSkillCheck.type === SkillCheckType.FLICK ? (

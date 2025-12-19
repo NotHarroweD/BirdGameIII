@@ -1,4 +1,3 @@
-
 import { Move, SkillCheckType } from '../../types';
 
 export interface FloatingText {
@@ -41,4 +40,5 @@ export interface ActiveSkillCheck {
   flickDirection?: number; 
   flickStartPos?: { x: number, y: number };
   flickCurrentPos?: { x: number, y: number };
+  drainBones?: { id: number; x: number; y: number; collected: boolean; value: number; vx: number; vy: number }[];
 }
