@@ -1,4 +1,3 @@
-
 import { PlayerState, Rarity, BirdInstance } from '../types';
 import { INITIAL_PLAYER_STATE, BIRD_TEMPLATES } from '../constants';
 
@@ -61,7 +60,6 @@ export const loadGame = (slot: number): PlayerState => {
       try {
           const parsed = JSON.parse(saved);
           
-          // Migration Logic
           const migrateGear = (g: any) => {
               if (!g) return null;
               if (!g.statBonuses) {
@@ -94,6 +92,8 @@ export const loadGame = (slot: number): PlayerState => {
                   const template = BIRD_TEMPLATES.find(t => t.id === b.id);
                   if (template) {
                       b.imageUrl = template.imageUrl;
+                      b.moves = template.moves;
+                      b.passive = template.passive;
                   }
               });
           }

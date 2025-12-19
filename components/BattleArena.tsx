@@ -572,7 +572,6 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               setActiveSkillCheck({...check});
           } else if (check.type === SkillCheckType.DRAIN_GAME) {
               if (check.stage === 1) {
-                  // Wait 400ms before starting the charge to give player a moment to react
                   const elapsedSinceStart = now - check.startTime;
                   if (elapsedSinceStart > 400 && check.flickStartPos) {
                       const chargeSpeed = 6.0; 
@@ -742,7 +741,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                   { id: 3, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60, value: 100, hit: false }
               ];
           }
-          const isSonic = move.id === 'sonic_wake';
+          const isSonic = move.id === 'sonic_wave';
           const check: ActiveSkillCheck = { 
               type: move.skillCheck, 
               move, 
