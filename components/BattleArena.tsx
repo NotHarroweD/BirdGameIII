@@ -3,6 +3,7 @@ import { BirdInstance, BattleBird, Move, BattleLog, MoveType, Altitude, SkillChe
 import { RARITY_CONFIG, rollRarity } from '../constants';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 import { BattleResultOverlay } from './BattleResultOverlay';
+
 import { createOpponent } from './battle/opponentGenerator';
 import { calculateRewards } from './battle/rewardLogic';
 import { calculateCombatResult } from './battle/combatLogic';
@@ -362,7 +363,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       onBattleExit(false);
   };
 
-  const resolveMinigame = (overrideProgress?: number) => {
+  const resolveMinigame = (overrideProgress?: number, finalMultiplier?: number) => {
       const check = skillCheckRef.current;
       if (!check) return;
       
@@ -383,10 +384,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           else if (progress >= 40) multiplier = 1.0;
           else multiplier = 0.6;
       } else if (check.type === SkillCheckType.COMBO) {
-          multiplier = check.storedMultiplier || 1.0;
-          if (progress >= 45 && progress <= 55) secondaryMultiplier = 1.0; 
-          else if (progress >= 30 && progress <= 70) secondaryMultiplier = 0.5; 
-          else secondaryMultiplier = 0.1; 
+          multiplier = finalMultiplier ?? check.accumulatedMultiplier ?? 1.0;
+          secondaryMultiplier = 0; 
       } else if (check.type === SkillCheckType.DRAIN_GAME) {
           multiplier = check.storedMultiplier || 1.0; 
           if (progress >= 90 && progress <= 100) secondaryMultiplier = 1.5; 
@@ -413,30 +412,86 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
 
   const advanceComboStage = () => {
       const check = skillCheckRef.current;
-      if (!check || check.stage !== 1) return;
+      if (!check || check.isFlashing) return;
+      
       const progress = check.progress;
-      let dmgMult = 1.0;
-      if (check.type === SkillCheckType.COMBO) {
-          if (progress >= 45 && progress <= 55) dmgMult = 1.5;
-          else if (progress >= 30 && progress <= 70) dmgMult = 1.2;
-          else dmgMult = 0.8;
-      } else if (check.type === SkillCheckType.DRAIN_GAME) {
+
+      if (check.type === SkillCheckType.DRAIN_GAME) {
+          if (check.stage !== 1) return;
+          let dmgMult = 1.0;
           if (progress >= 42 && progress <= 52) dmgMult = 1.5;
           else if (progress >= 35 && progress <= 60) dmgMult = 1.2;
           else if (progress >= 25 && progress <= 75) dmgMult = 1.0;
           else dmgMult = 0.6;
+          
+          const newCheck = {
+              ...check,
+              stage: 2,
+              storedMultiplier: dmgMult,
+              startTime: Date.now(),
+              progress: 0,
+              direction: 1 as 1 | -1
+          };
+          skillCheckRef.current = newCheck;
+          setActiveSkillCheck(newCheck);
+          spawnFloatingText(dmgMult >= 1.5 ? "CRITICAL HIT!" : "CHARGED", 'opponent', 0, -80, "text-cyan-400", 1.5);
+      } else if (check.type === SkillCheckType.COMBO) {
+          const targetStart = check.targetZoneStart ?? 40;
+          const targetWidth = check.targetZoneWidth ?? 38;
+          const targetMid = targetStart + (targetWidth / 2);
+          const diff = Math.abs(progress - targetMid);
+          
+          let hitMult = 0.2;
+          const isHit = diff <= targetWidth / 2;
+          
+          let newComboCounter = isHit ? (check.currentCombo || 0) + 1 : 0;
+          let hitFeedback = undefined;
+
+          if (isHit) {
+              if (newComboCounter === 1) hitFeedback = { text: "1x Combo", color: "text-emerald-400", id: Date.now(), intensity: 1 };
+              else if (newComboCounter === 2) hitFeedback = { text: "2x Combo", color: "text-blue-400", id: Date.now(), intensity: 2 };
+              else if (newComboCounter >= 3) hitFeedback = { text: "3x COMBO!!", color: "text-purple-400", id: Date.now(), intensity: 3 };
+
+              if (diff <= targetWidth / 8) { hitMult = 0.6; }
+              else { hitMult = 0.4; }
+          }
+
+          const newAccumulated = (check.accumulatedMultiplier || 0) + (isHit ? hitMult : 0);
+          const newMarkers = isHit ? [...(check.hitMarkers || []), { id: Date.now(), progress }] : (check.hitMarkers || []);
+
+          const updatedCheck = {
+              ...check,
+              isFlashing: true,
+              hitMarkers: newMarkers,
+              hitFeedback,
+              currentCombo: newComboCounter,
+              accumulatedMultiplier: newAccumulated
+          };
+          skillCheckRef.current = updatedCheck;
+          setActiveSkillCheck(updatedCheck);
+
+          setTimeout(() => {
+              const currentCheck = skillCheckRef.current;
+              if (!currentCheck || currentCheck.type !== SkillCheckType.COMBO) return;
+
+              if (currentCheck.stage! < (currentCheck.maxStages || 3)) {
+                  const nextWidth = currentCheck.stage === 1 ? 28 : 20; 
+                  const nextCheck = {
+                      ...currentCheck,
+                      isFlashing: false,
+                      stage: currentCheck.stage! + 1,
+                      targetZoneWidth: nextWidth,
+                      targetZoneStart: Math.random() * (100 - nextWidth),
+                      hitMarkers: [],
+                      hitFeedback: currentCheck.hitFeedback 
+                  };
+                  skillCheckRef.current = nextCheck;
+                  setActiveSkillCheck(nextCheck);
+              } else {
+                  resolveMinigame(progress, newAccumulated);
+              }
+          }, 120); 
       }
-      const newCheck = {
-          ...check,
-          stage: 2,
-          storedMultiplier: dmgMult,
-          startTime: Date.now(),
-          progress: 0,
-          direction: 1 as 1 | -1
-      };
-      skillCheckRef.current = newCheck;
-      setActiveSkillCheck(newCheck);
-      spawnFloatingText(dmgMult >= 1.5 ? "CRITICAL HIT!" : "CHARGED", 'opponent', 0, -80, "text-cyan-400", 1.5);
   };
 
   const processAI = (now: number) => {
@@ -470,7 +525,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           const physicsMult = frameDelta / 16.66; 
 
           if (check.type === SkillCheckType.TIMING || check.type === SkillCheckType.COMBO) {
-              const speed = check.type === SkillCheckType.COMBO && check.stage === 2 ? 2.5 : 1.5;
+              const speed = check.type === SkillCheckType.COMBO ? (1.2 + (check.stage || 1) * 0.7) : 1.5;
               let p = check.progress + (speed * physicsMult) * (check.direction || 1);
               if (p >= 100 || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1;
               check.progress = Math.max(0, Math.min(100, p));
@@ -504,6 +559,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                   let p = check.progress + (speed * physicsMult);
                   if (p >= 100) {
                       resolveMinigame(100);
+                      return;
                   } else {
                     check.progress = Math.min(100, p);
                     setActiveSkillCheck({...check});
@@ -629,7 +685,14 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               progress: move.skillCheck === SkillCheckType.DRAIN_GAME ? 100 : (move.skillCheck === SkillCheckType.TIMING ? 0 : 20), 
               direction: 1,
               stage: 1,
-              reflexTargets
+              reflexTargets,
+              maxStages: move.skillCheck === SkillCheckType.COMBO ? 3 : 2,
+              targetZoneWidth: move.skillCheck === SkillCheckType.COMBO ? 38 : 15,
+              targetZoneStart: move.skillCheck === SkillCheckType.COMBO ? Math.random() * 62 : 40,
+              accumulatedMultiplier: 0,
+              currentCombo: 0,
+              hitMarkers: [],
+              isFlashing: false
           };
           
           lastFrameTimeRef.current = Date.now();
@@ -655,9 +718,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       } else if (check.type === SkillCheckType.TIMING) {
           resolveMinigame();
       } else if (check.type === SkillCheckType.COMBO || check.type === SkillCheckType.DRAIN_GAME) {
-          if (check.stage === 1) {
-              advanceComboStage();
-          }
+          advanceComboStage();
       }
   };
 

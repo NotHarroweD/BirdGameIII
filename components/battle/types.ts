@@ -1,4 +1,3 @@
-
 import { Move, SkillCheckType } from '../../types';
 
 export interface FloatingText {
@@ -24,7 +23,15 @@ export interface ActiveSkillCheck {
   startTime: number;
   progress: number;
   direction?: 1 | -1;
-  stage?: number; // For COMBO: 1 (Power), 2 (Absorb)
-  storedMultiplier?: number; // Result of stage 1
-  reflexTargets?: { id: number; x: number; y: number; value: number; hit: boolean }[]; // For REFLEX
+  stage?: number; 
+  maxStages?: number;
+  targetZoneStart?: number;
+  targetZoneWidth?: number;
+  accumulatedMultiplier?: number;
+  storedMultiplier?: number; 
+  currentCombo?: number;
+  hitMarkers?: { id: number; progress: number }[];
+  isFlashing?: boolean;
+  hitFeedback?: { text: string; color: string; id: number; intensity: number };
+  reflexTargets?: { id: number; x: number; y: number; value: number; hit: boolean }[]; 
 }
