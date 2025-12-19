@@ -1,3 +1,4 @@
+
 import { Move, SkillCheckType } from '../../types';
 
 export interface FloatingText {
@@ -32,8 +33,12 @@ export interface ActiveSkillCheck {
   currentCombo?: number;
   hitMarkers?: { id: number; progress: number }[];
   isFlashing?: boolean;
-  flashColor?: 'white' | 'red';
+  flashColor?: 'white' | 'red' | 'emerald' | 'yellow';
   hitFeedback?: { text: string; color: string; id: number; intensity: number };
   reflexTargets?: { id: number; x: number; y: number; value: number; hit: boolean }[];
   isMovingZone?: boolean;
+  hitResult?: { color: string; intensity: number; id: number };
+  flickDirection?: number; 
+  flickStartPos?: { x: number, y: number };
+  flickCurrentPos?: { x: number, y: number };
 }

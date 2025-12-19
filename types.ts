@@ -39,7 +39,8 @@ export enum SkillCheckType {
   MASH = 'MASH',
   COMBO = 'COMBO',
   DRAIN_GAME = 'DRAIN_GAME',
-  REFLEX = 'REFLEX'
+  REFLEX = 'REFLEX',
+  FLICK = 'FLICK'
 }
 
 export enum GearType {

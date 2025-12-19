@@ -159,9 +159,9 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   };
 
   const triggerCooldown = (id: string, duration: number) => {
-    const now = Date.now();
-    setLastUsedMap(prev => ({ ...prev, [id]: now }));
-    lastUsedMapRef.current = { ...lastUsedMapRef.current, [id]: now };
+    const expiry = Date.now() + duration;
+    setLastUsedMap(prev => ({ ...prev, [id]: expiry }));
+    lastUsedMapRef.current = { ...lastUsedMapRef.current, [id]: expiry };
   };
 
   const executeMove = async (attacker: BattleBird, defender: BattleBird, move: Move, isPlayer: boolean, multiplier: number, secondaryMultiplier: number = 0, damageColorOverride?: string) => {
@@ -378,9 +378,9 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               const targetMid = (check.targetZoneStart || 40) + (check.targetZoneWidth || 32) / 2;
               const diff = Math.abs(50 - targetMid);
               const halfWidth = (check.targetZoneWidth || 32) / 2;
-              if (diff <= halfWidth / 5) multiplier = 2.8;
-              else if (diff <= halfWidth / 2.5) multiplier = 2.0;
-              else if (diff <= halfWidth / 1.5) multiplier = 1.5;
+              if (diff <= halfWidth / 6) multiplier = 3.0;
+              else if (diff <= halfWidth / 3) multiplier = 2.2;
+              else if (diff <= halfWidth / 1.5) multiplier = 1.6;
               else if (diff <= halfWidth) multiplier = 1.2;
               else multiplier = 0.5;
           } else {
@@ -403,6 +403,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           else if (progress >= 75 && progress < 90) secondaryMultiplier = 1.2; 
           else if (progress >= 55 && progress < 75) secondaryMultiplier = 1.0;
           else secondaryMultiplier = 0.5; 
+      } else if (check.type === SkillCheckType.FLICK) {
+          multiplier = finalMultiplier || 1.0;
       }
       
       let text = "GOOD";
@@ -417,11 +419,13 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       
       spawnFloatingText(text, 'opponent', -50, -100, color, 2);
 
-      const finalCooldown = multiplier >= 1.2 ? check.move.cooldown / 2 : check.move.cooldown;
+      const isPerfect = multiplier >= 1.5;
+      const hasPassive = playerBirdRef.current?.id === 'hummingbird';
+      const finalCooldown = (hasPassive && isPerfect) ? check.move.cooldown / 2 : check.move.cooldown;
       triggerCooldown(check.move.id, finalCooldown);
 
       let damageColor = undefined;
-      if (check.type === SkillCheckType.COMBO || (check.type === SkillCheckType.TIMING && check.isMovingZone)) {
+      if (check.type === SkillCheckType.COMBO || (check.type === SkillCheckType.TIMING && check.isMovingZone) || check.type === SkillCheckType.FLICK) {
           if (multiplier >= 2.2) damageColor = "text-purple-400";
           else if (multiplier >= 1.7) damageColor = "text-blue-400";
           else if (multiplier >= 1.1) damageColor = "text-emerald-400";
@@ -482,14 +486,15 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           const newAccumulated = (check.accumulatedMultiplier || 0) + (isHit ? hitMult : 0);
           const newMarkers = isHit ? [...(check.hitMarkers || []), { id: Date.now(), progress }] : (check.hitMarkers || []);
 
-          const updatedCheck = {
+          const updatedCheck: ActiveSkillCheck = {
               ...check,
               isFlashing: true,
-              flashColor: (isHit ? 'white' : 'red') as 'white' | 'red',
+              flashColor: (isHit ? 'emerald' : 'red') as 'emerald' | 'red',
               hitMarkers: newMarkers,
               hitFeedback,
               currentCombo: newComboCounter,
-              accumulatedMultiplier: newAccumulated
+              accumulatedMultiplier: newAccumulated,
+              hitResult: { color: isHit ? '#10b981' : '#f43f5e', intensity: isHit ? (newComboCounter + 1) : 1, id: Date.now() }
           };
           skillCheckRef.current = updatedCheck;
           setActiveSkillCheck(updatedCheck);
@@ -523,8 +528,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       const ai = opponentBirdRef.current;
       const pl = playerBirdRef.current;
       const availableMoves = ai.moves.filter(m => {
-          const cd = lastUsedMapRef.current[`ai_${m.id}`] || 0;
-          return now >= cd + m.cooldown && ai.currentEnergy >= m.cost;
+          const expiry = lastUsedMapRef.current[`ai_${m.id}`] || 0;
+          return now >= expiry && ai.currentEnergy >= m.cost;
       });
       if (availableMoves.length === 0) { aiNextActionTime.current = now + 500; return; }
       const move = availableMoves[Math.floor(Math.random() * availableMoves.length)];
@@ -595,6 +600,10 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                     setActiveSkillCheck({...check});
                   }
               }
+          } else if (check.type === SkillCheckType.FLICK) {
+               if (now - check.startTime > 1200 && !check.isFlashing) {
+                   resolveMinigame(0, 0.4); 
+               }
           }
       }
       
@@ -627,7 +636,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                   }
               }
 
-              if (!winnerRef.current && !playerDied && opponentBirdRef.current?.statusEffects.includes('bleed')) {
+              if (!winnerRef.current && !playerDied && !opponentDied && opponentBirdRef.current?.statusEffects.includes('bleed')) {
                   const dmg = Math.floor(opponentBirdRef.current.maxHp * 0.05);
                   const remaining = opponentBirdRef.current.currentHp - dmg;
                   if (remaining <= 0) {
@@ -689,7 +698,9 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   const stopLoop = () => cancelAnimationFrame(animationFrameRef.current);
   
   const handleMove = (move: Move) => {
-      if (winnerRef.current || activeSkillCheck || !playerBird || playerBird.currentEnergy < move.cost) return;
+      const now = Date.now();
+      const expiry = lastUsedMap[move.id] || 0;
+      if (winnerRef.current || activeSkillCheck || !playerBird || playerBird.currentEnergy < move.cost || now < expiry) return;
       
       setPlayerBird(prev => {
         const next = prev ? ({...prev, currentEnergy: prev.currentEnergy - move.cost}) : null;
@@ -707,7 +718,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                   { id: 3, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60, value: 100, hit: false }
               ];
           }
-          const isSonic = move.id === 'sonic_boom';
+          const isSonic = move.id === 'sonic_wake';
           const check: ActiveSkillCheck = { 
               type: move.skillCheck, 
               move, 
@@ -723,7 +734,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               currentCombo: 0,
               hitMarkers: [],
               isFlashing: false,
-              isMovingZone: isSonic
+              isMovingZone: isSonic,
+              flickDirection: move.skillCheck === SkillCheckType.FLICK ? Math.floor(Math.random() * 4) * 90 : undefined 
           };
           
           lastFrameTimeRef.current = Date.now();
@@ -749,9 +761,21 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           setActiveSkillCheck({...check});
       } else if (check.type === SkillCheckType.TIMING) {
           if (check.isMovingZone) {
+              const targetMid = (check.targetZoneStart || 40) + (check.targetZoneWidth || 32) / 2;
+              const diff = Math.abs(50 - targetMid);
+              const halfWidth = (check.targetZoneWidth || 32) / 2;
+              
+              let tapColor = '#f43f5e';
+              let intensity = 1;
+              if (diff <= halfWidth / 6) { tapColor = '#10b981'; intensity = 5; }
+              else if (diff <= halfWidth / 3) { tapColor = '#10b981'; intensity = 4; }
+              else if (diff <= halfWidth / 1.5) { tapColor = '#10b981'; intensity = 3; }
+              else if (diff <= halfWidth) { tapColor = '#facc15'; intensity = 2; }
+
               const marker = { id: Date.now(), progress: 50 };
               check.isFlashing = true;
               check.hitMarkers = [marker];
+              check.hitResult = { color: tapColor, intensity, id: Date.now() };
               setActiveSkillCheck({...check});
               skillCheckRef.current = check;
               setTimeout(() => {
@@ -762,13 +786,67 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           }
       } else if (check.type === SkillCheckType.COMBO || check.type === SkillCheckType.DRAIN_GAME) {
           advanceComboStage();
+      } else if (check.type === SkillCheckType.FLICK) {
+          check.flickStartPos = { x: e.clientX, y: e.clientY };
+          check.flickCurrentPos = { x: e.clientX, y: e.clientY };
+          setActiveSkillCheck({...check});
+      }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+      const check = skillCheckRef.current;
+      if (check && check.type === SkillCheckType.FLICK && check.flickStartPos) {
+          check.flickCurrentPos = { x: e.clientX, y: e.clientY };
+          setActiveSkillCheck({...check});
       }
   };
 
   const handleRelease = (e: React.PointerEvent) => {
       const check = skillCheckRef.current;
-      if (check && check.type === SkillCheckType.DRAIN_GAME && check.stage === 2) {
+      if (!check) return;
+
+      if (check.type === SkillCheckType.DRAIN_GAME && check.stage === 2) {
           resolveMinigame();
+      } else if (check.type === SkillCheckType.FLICK && check.flickStartPos) {
+          const start = check.flickStartPos;
+          const dx = e.clientX - start.x;
+          const dy = e.clientY - start.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+          
+          let normalizedAngle = (angle + 360) % 360;
+          let target = check.flickDirection || 0;
+          let diff = Math.abs(normalizedAngle - target);
+          if (diff > 180) diff = 360 - diff;
+
+          const minFlickDist = 60;
+          if (dist < minFlickDist) {
+              resolveMinigame(0, 0.4); 
+              return;
+          }
+
+          let multiplier = 0.5;
+          let color = '#f43f5e';
+          let intensity = 1;
+
+          if (diff <= 22.5) { 
+              multiplier = dist > 180 ? 3.0 : dist > 120 ? 2.2 : 1.5; 
+              color = '#10b981';
+              intensity = dist > 180 ? 6 : 4;
+          } else if (diff <= 45) {
+              multiplier = dist > 120 ? 1.5 : 1.2;
+              color = '#34d399';
+              intensity = 3;
+          } else if (diff <= 90) {
+              multiplier = 0.8;
+              color = '#facc15';
+              intensity = 2;
+          }
+
+          check.isFlashing = true;
+          check.hitResult = { color, intensity, id: Date.now() };
+          setActiveSkillCheck({...check});
+          setTimeout(() => resolveMinigame(0, multiplier), 150);
       }
   };
 
@@ -799,7 +877,9 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
 
           spawnFloatingText(text, 'opponent', -50, -100, color, 2);
           
-          const finalCooldown = multiplier >= 1.2 ? check.move.cooldown / 2 : check.move.cooldown;
+          const isPerfect = multiplier >= 1.5;
+          const hasPassive = playerBirdRef.current?.id === 'hummingbird';
+          const finalCooldown = (hasPassive && isPerfect) ? check.move.cooldown / 2 : check.move.cooldown;
           triggerCooldown(check.move.id, finalCooldown);
 
           skillCheckRef.current = null;
@@ -856,6 +936,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
             onMash={handleMash} 
             onRelease={handleRelease}
             onReflexTap={handleReflexTap} 
+            onPointerMove={handlePointerMove}
        />
 
        <AnimatePresence>

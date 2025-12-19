@@ -1,3 +1,4 @@
+
 import { BirdTemplate, BirdInstance, MoveType, SkillCheckType, Rarity, Bird } from '../types';
 import { RARITY_CONFIG } from './items';
 
@@ -21,14 +22,14 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
       speed: [95, 110]
     },
     passive: {
-      name: 'Hyper Metabolism',
-      description: 'Regenerates Energy 50% faster.'
+      name: 'Chrono-Flutter',
+      description: 'Perfect minigame results (x1.5+) reduce move cooldowns by 50%.'
     },
     moves: [
-      { id: 'rapid_peck', name: 'Rapid Peck', description: 'Quick 3-hit combo combo.', type: MoveType.ATTACK, power: 65, cost: 10, accuracy: 95, cooldown: 4000, skillCheck: SkillCheckType.COMBO },
-      { id: 'evasive_maneuvers', name: 'Evasive Maneuvers', description: 'Increases evasion.', type: MoveType.DEFENSE, power: 0, cost: 15, accuracy: 100, effect: 'dodge', cooldown: 12000, skillCheck: SkillCheckType.REFLEX },
-      { id: 'nectar_sip', name: 'Nectar Sip', description: 'Restore HP.', type: MoveType.HEAL, power: 20, cost: 25, accuracy: 100, cooldown: 18000, skillCheck: SkillCheckType.REFLEX }, 
-      { id: 'sonic_boom', name: 'Sonic Boom', description: 'High altitude sonic wave.', type: MoveType.SPECIAL, power: 55, cost: 45, accuracy: 90, requiresHeight: true, cooldown: 12000, skillCheck: SkillCheckType.TIMING }
+      { id: 'rapid_peck', name: 'Rapid Peck', description: 'Quick 3-hit combo combo.', type: MoveType.ATTACK, power: 60, cost: 10, accuracy: 95, cooldown: 4000, skillCheck: SkillCheckType.COMBO },
+      { id: 'evasive_maneuvers', name: 'Evasive Maneuvers', description: 'Increases evasion.', type: MoveType.DEFENSE, power: 0, cost: 25, accuracy: 100, effect: 'dodge', cooldown: 12000, skillCheck: SkillCheckType.REFLEX },
+      { id: 'nectar_sip', name: 'Nectar Sip', description: 'Restore HP.', type: MoveType.HEAL, power: 12, cost: 25, accuracy: 100, cooldown: 18000, skillCheck: SkillCheckType.REFLEX }, 
+      { id: 'sonic_wake', name: 'Sonic Wake', description: 'High speed dash creating a destructive pressure wave.', type: MoveType.SPECIAL, power: 52, cost: 45, accuracy: 90, requiresHeight: true, cooldown: 12000, skillCheck: SkillCheckType.FLICK }
     ],
     huntingConfig: {
       baseRate: 2,

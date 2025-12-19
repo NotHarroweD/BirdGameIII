@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { BattleBird, Move, MoveType, SkillCheckType } from '../../types';
 import { Crosshair, Shield, Heart, Zap, Activity } from 'lucide-react';
@@ -15,8 +14,9 @@ export const BattleControls: React.FC<BattleControlsProps> = ({ playerBird, last
         <div className="bg-slate-900 border-t border-slate-700 p-2 shrink-0 pb-6 md:pb-2 z-20">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 h-40 md:h-24">
                 {playerBird.moves.map(m => {
-                    const onCd = (lastUsedMap[m.id] || 0) + m.cooldown > Date.now();
-                    const remaining = Math.max(0, ((lastUsedMap[m.id] || 0) + m.cooldown) - Date.now());
+                    const expiry = lastUsedMap[m.id] || 0;
+                    const onCd = expiry > Date.now();
+                    const remaining = Math.max(0, expiry - Date.now());
                     const showCrit = m.type === MoveType.ATTACK && playerBird.gear?.beak;
                     const showBleed = m.type === MoveType.ATTACK && playerBird.gear?.claws;
 
