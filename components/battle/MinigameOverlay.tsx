@@ -15,7 +15,6 @@ interface MinigameOverlayProps {
 export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillCheck, onMash, onRelease, onReflexTap }) => {
     const [overlayParticles, setOverlayParticles] = useState<{ id: number, x: number, y: number, color: string }[]>([]);
 
-    // Spawn internal particles when feedback changes
     useEffect(() => {
         if (activeSkillCheck?.hitFeedback) {
             const newParticles = Array.from({ length: 12 }).map((_, i) => ({
@@ -36,8 +35,11 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         <AnimatePresence>
         {activeSkillCheck && (
             <motion.div 
-                initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-                className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-8 select-none touch-none"
+                initial={{opacity:0}} 
+                animate={{opacity:1}} 
+                exit={{opacity:0}}
+                transition={{ duration: 0.1 }}
+                className="absolute inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center gap-8 select-none touch-none"
                 onPointerDown={onMash}
                 onPointerUp={onRelease}
                 onPointerLeave={onRelease}
@@ -122,7 +124,6 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                     </div>
                 ) : (
                     <div className="flex flex-col items-center w-full relative">
-                        {/* Internal Particles */}
                         {overlayParticles.map(p => (
                             <motion.div 
                                 key={p.id}
@@ -135,65 +136,95 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                         ))}
 
                         <div className="text-white font-tech text-4xl font-black animate-pulse uppercase tracking-widest text-center px-4 drop-shadow-[0_0_15px_rgba(6,182,212,0.8)] mb-8">
-                            {activeSkillCheck.type === SkillCheckType.TIMING ? "TAP WHEN GREEN!" : 
+                            {activeSkillCheck.type === SkillCheckType.TIMING ? (activeSkillCheck.isMovingZone ? "SONIC PRECISION" : "TAP AT GREEN!") : 
                             activeSkillCheck.type === SkillCheckType.COMBO 
                             ? `COMBO HIT ${activeSkillCheck.stage}/3`
                             : "TAP FAST!"}
                         </div>
 
-                        {/* Hit Feedback Text Area - Scaled down further to prevent clipping */}
                         <div className="h-16 flex items-center justify-center overflow-visible mb-4 relative w-full">
                             <AnimatePresence>
                                 {activeSkillCheck.hitFeedback && (
                                     <motion.div
                                         key={activeSkillCheck.hitFeedback.id}
-                                        initial={{ opacity: 0, scale: 0.2, y: 30, rotate: -5 }}
+                                        initial={{ opacity: 0, scale: 0.2, y: 30 }}
                                         animate={{ 
                                             opacity: 1, 
                                             scale: activeSkillCheck.hitFeedback.intensity >= 3 ? [1.1, 1.4, 1.3] : [0.9, 1.2, 1.1], 
-                                            y: 0, 
-                                            rotate: 0 
+                                            y: 0 
                                         }}
-                                        exit={{ opacity: 0, scale: 2, y: -60, filter: "blur(8px)" }}
-                                        transition={{ 
-                                            type: "spring", 
-                                            stiffness: 400, 
-                                            damping: 18,
-                                        }}
+                                        exit={{ opacity: 0, scale: 1.5, filter: "blur(8px)" }}
+                                        transition={{ type: "spring", stiffness: 400, damping: 20 }}
                                         className={`font-tech font-black text-2xl md:text-3xl italic tracking-tighter drop-shadow-[0_0_20px_black] pointer-events-none whitespace-nowrap z-50 flex items-center gap-3 ${activeSkillCheck.hitFeedback.color}`}
                                     >
-                                        {activeSkillCheck.hitFeedback.intensity >= 3 && <Sparkles className="animate-pulse text-yellow-400" size={20} />}
                                         {activeSkillCheck.hitFeedback.text}
-                                        {activeSkillCheck.hitFeedback.intensity >= 3 && <Sparkles className="animate-pulse text-yellow-400" size={20} />}
                                     </motion.div>
                                 )}
                             </AnimatePresence>
                         </div>
 
-                        <div className="w-[75%] h-24 border-4 border-slate-700 rounded-xl relative overflow-hidden bg-slate-900 shadow-2xl mb-4">
+                        <div className={`w-[85%] border-4 border-slate-700 rounded-xl relative overflow-hidden bg-slate-950 shadow-2xl mb-4 ${activeSkillCheck.isMovingZone ? 'h-8' : 'h-24'}`}>
                             {activeSkillCheck.type === SkillCheckType.TIMING || activeSkillCheck.type === SkillCheckType.COMBO ? (
                                 <>
+                                    {/* Sonic Boom Moving Zone with discrete segments */}
                                     <motion.div 
-                                        className={`absolute h-full border-x-2 shadow-[0_0_25px_rgba(16,185,129,0.5)] ${activeSkillCheck.isFlashing ? 'bg-white z-20' : 'bg-emerald-500/40 border-emerald-400'}`} 
-                                        style={{ left: `${activeSkillCheck.targetZoneStart ?? 40}%`, width: `${activeSkillCheck.targetZoneWidth ?? 15}%` }}
-                                        animate={activeSkillCheck.isFlashing ? { opacity: [1, 0.5, 1], scaleY: [1, 1.2, 1] } : {}}
-                                        transition={{ duration: 0.1, repeat: 1 }}
-                                    />
+                                        className={`absolute h-full ${activeSkillCheck.isMovingZone ? 'border-x-4 border-rose-600 shadow-[0_0_15px_rgba(225,29,72,0.5)]' : ''}`} 
+                                        style={{ 
+                                            left: `${activeSkillCheck.targetZoneStart ?? 40}%`, 
+                                            width: `${activeSkillCheck.targetZoneWidth ?? 15}%`,
+                                            background: activeSkillCheck.isMovingZone 
+                                                ? 'linear-gradient(to right, #ef4444 0%, #ef4444 20%, #facc15 20%, #facc15 40%, #10b981 40%, #10b981 60%, #facc15 60%, #facc15 80%, #ef4444 80%, #ef4444 100%)'
+                                                : 'rgba(16, 185, 129, 0.4)'
+                                        }}
+                                    >
+                                        {/* Divider Lines for Sonic Boom */}
+                                        {activeSkillCheck.isMovingZone && (
+                                            <>
+                                                <div className="absolute left-[20%] top-0 bottom-0 w-px bg-black/40" />
+                                                <div className="absolute left-[40%] top-0 bottom-0 w-px bg-black/40" />
+                                                <div className="absolute left-[60%] top-0 bottom-0 w-px bg-black/40" />
+                                                <div className="absolute left-[80%] top-0 bottom-0 w-px bg-black/40" />
+                                            </>
+                                        )}
+                                    </motion.div>
+
+                                    {/* Success/Fail Outline Flash for Combo & Timing */}
+                                    <AnimatePresence>
+                                        {activeSkillCheck.isFlashing && (
+                                            <motion.div 
+                                                initial={{ opacity: 0, scale: 1.05 }}
+                                                animate={{ opacity: [1, 0], scale: 1.2 }}
+                                                exit={{ opacity: 0 }}
+                                                transition={{ duration: 0.25 }}
+                                                className={`absolute inset-0 z-40 border-4 ${activeSkillCheck.flashColor === 'red' ? 'border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.8)]' : 'border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.8)]'}`}
+                                                style={{ 
+                                                    left: `${activeSkillCheck.targetZoneStart ?? 40}%`, 
+                                                    width: `${activeSkillCheck.targetZoneWidth ?? 15}%`,
+                                                    height: '100%',
+                                                    top: 0
+                                                }}
+                                            />
+                                        )}
+                                    </AnimatePresence>
+
                                     <AnimatePresence>
                                         {activeSkillCheck.hitMarkers?.map((marker) => (
                                             <motion.div 
                                                 key={marker.id} 
                                                 initial={{ opacity: 1, scaleX: 1 }}
-                                                animate={{ opacity: 0, scaleX: 2.5 }}
-                                                transition={{ duration: 0.5, ease: "easeOut" }}
-                                                className="absolute w-2 h-full bg-cyan-300 z-10 shadow-[0_0_30px_rgba(103,232,249,1)]"
+                                                animate={{ opacity: 0, scaleX: 10, filter: "blur(10px)" }}
+                                                transition={{ duration: 0.3, ease: "easeOut" }}
+                                                className="absolute w-1.5 h-full bg-white z-10 shadow-[0_0_30px_white]"
                                                 style={{ left: `${marker.progress}%` }}
                                             />
                                         ))}
                                     </AnimatePresence>
+                                    
                                     <motion.div 
-                                        className={`absolute w-3 h-full shadow-[0_0_15px_white] ${activeSkillCheck.type === SkillCheckType.COMBO ? 'bg-purple-400 shadow-[0_0_20px_rgba(192,132,252,0.8)]' : 'bg-white'}`} 
-                                        style={{left: `${activeSkillCheck.progress}%` }} 
+                                        className={`absolute h-full shadow-[0_0_20px_white] z-30 ${activeSkillCheck.type === SkillCheckType.COMBO ? 'bg-purple-400 w-4' : 'bg-white w-1.5'}`} 
+                                        style={{left: `${activeSkillCheck.isMovingZone ? 50 : activeSkillCheck.progress}%`, transform: 'translateX(-50%)' }} 
+                                        animate={activeSkillCheck.isFlashing && activeSkillCheck.isMovingZone ? { scaleX: [1, 10], opacity: [1, 0], filter: ["blur(0px)", "blur(15px)"] } : {}}
+                                        transition={{ duration: 0.1 }}
                                     />
                                 </>
                             ) : (
@@ -201,16 +232,15 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                                     <div className="absolute left-[70%] right-[10%] top-0 bottom-0 bg-emerald-500/20 border-x border-emerald-500 z-0 flex items-center justify-center">
                                         <div className="text-[9px] font-bold text-emerald-400 -rotate-90">BONUS</div>
                                     </div>
-                                    <div className="absolute right-0 top-0 bottom-0 w-[10%] bg-cyan-500/20 border-l border-cyan-500 z-0" />
-                                    <div className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 relative z-10 shadow-[0_0_10px_rgba(6,182,212,0.5)]" style={{width: `${activeSkillCheck.progress}%`}} />
+                                    <div className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 relative z-10" style={{width: `${activeSkillCheck.progress}%`}} />
                                 </>
                             )}
                         </div>
                         
-                        <div className="text-slate-400 font-mono text-sm text-center opacity-70">
+                        <div className="text-slate-500 font-mono text-[10px] uppercase tracking-[0.2em] opacity-80 mt-2">
                             {activeSkillCheck.type === SkillCheckType.MASH 
-                                ? "Stop in GREEN zone for bonus,\nor fill to 100% for OVERCHARGE!" 
-                                : "(Tap anywhere to hit the zone)"}
+                                ? "MASH FOR POWER" 
+                                : "TAP AT CENTER CROSSING"}
                         </div>
                     </div>
                 )}

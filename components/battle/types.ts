@@ -32,6 +32,8 @@ export interface ActiveSkillCheck {
   currentCombo?: number;
   hitMarkers?: { id: number; progress: number }[];
   isFlashing?: boolean;
+  flashColor?: 'white' | 'red';
   hitFeedback?: { text: string; color: string; id: number; intensity: number };
-  reflexTargets?: { id: number; x: number; y: number; value: number; hit: boolean }[]; 
+  reflexTargets?: { id: number; x: number; y: number; value: number; hit: boolean }[];
+  isMovingZone?: boolean;
 }

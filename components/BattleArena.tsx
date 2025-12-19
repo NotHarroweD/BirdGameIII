@@ -374,9 +374,20 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       let multiplier = 1.0;
       let secondaryMultiplier = 0; 
       if (check.type === SkillCheckType.TIMING) {
-          if (progress >= 45 && progress <= 55) multiplier = 1.5;
-          else if (progress >= 30 && progress <= 70) multiplier = 1.2;
-          else multiplier = 0.7;
+          if (check.isMovingZone) {
+              const targetMid = (check.targetZoneStart || 40) + (check.targetZoneWidth || 32) / 2;
+              const diff = Math.abs(50 - targetMid);
+              const halfWidth = (check.targetZoneWidth || 32) / 2;
+              if (diff <= halfWidth / 6) multiplier = 3.0;
+              else if (diff <= halfWidth / 3) multiplier = 2.2;
+              else if (diff <= halfWidth / 1.5) multiplier = 1.6;
+              else if (diff <= halfWidth) multiplier = 1.2;
+              else multiplier = 0.5;
+          } else {
+            if (progress >= 45 && progress <= 55) multiplier = 1.5;
+            else if (progress >= 30 && progress <= 70) multiplier = 1.2;
+            else multiplier = 0.7;
+          }
       } else if (check.type === SkillCheckType.MASH) {
           if (progress >= 100) multiplier = 1.5; 
           else if (progress >= 70 && progress <= 90) multiplier = 1.2; 
@@ -404,16 +415,16 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
            else if (secondaryMultiplier < 1.0) { text = "POOR ABSORB"; color = "text-slate-400"; }
       }
       
-      spawnFloatingText(text, 'opponent', -50, -80, color, 2);
+      spawnFloatingText(text, 'opponent', -50, -100, color, 2);
 
       const finalCooldown = multiplier >= 1.2 ? check.move.cooldown / 2 : check.move.cooldown;
       triggerCooldown(check.move.id, finalCooldown);
 
       let damageColor = undefined;
-      if (check.type === SkillCheckType.COMBO) {
-          if (multiplier >= 1.5) damageColor = "text-purple-400";
-          else if (multiplier >= 1.0) damageColor = "text-blue-400";
-          else if (multiplier >= 0.4) damageColor = "text-emerald-400";
+      if (check.type === SkillCheckType.COMBO || (check.type === SkillCheckType.TIMING && check.isMovingZone)) {
+          if (multiplier >= 2.2) damageColor = "text-purple-400";
+          else if (multiplier >= 1.7) damageColor = "text-blue-400";
+          else if (multiplier >= 1.1) damageColor = "text-emerald-400";
           else damageColor = "text-white";
       }
 
@@ -453,7 +464,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           const targetMid = targetStart + (targetWidth / 2);
           const diff = Math.abs(progress - targetMid);
           
-          let hitMult = 0.2;
+          let hitMult = 0.3;
           const isHit = diff <= targetWidth / 2;
           
           let newComboCounter = isHit ? (check.currentCombo || 0) + 1 : 0;
@@ -464,8 +475,8 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               else if (newComboCounter === 2) hitFeedback = { text: "2x Combo", color: "text-blue-400", id: Date.now(), intensity: 2 };
               else if (newComboCounter >= 3) hitFeedback = { text: "3x COMBO!!", color: "text-purple-400", id: Date.now(), intensity: 3 };
 
-              if (diff <= targetWidth / 8) { hitMult = 0.6; }
-              else { hitMult = 0.4; }
+              if (diff <= targetWidth / 8) { hitMult = 1.0; }
+              else { hitMult = 0.6; }
           }
 
           const newAccumulated = (check.accumulatedMultiplier || 0) + (isHit ? hitMult : 0);
@@ -474,6 +485,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           const updatedCheck = {
               ...check,
               isFlashing: true,
+              flashColor: (isHit ? 'white' : 'red') as 'white' | 'red',
               hitMarkers: newMarkers,
               hitFeedback,
               currentCombo: newComboCounter,
@@ -538,9 +550,15 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
 
           if (check.type === SkillCheckType.TIMING || check.type === SkillCheckType.COMBO) {
               const speed = check.type === SkillCheckType.COMBO ? (1.2 + (check.stage || 1) * 0.7) : 1.5;
-              let p = check.progress + (speed * physicsMult) * (check.direction || 1);
-              if (p >= 100 || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1;
-              check.progress = Math.max(0, Math.min(100, p));
+              if (check.isMovingZone) {
+                  let p = (check.targetZoneStart || 0) + (speed * physicsMult) * (check.direction || 1);
+                  if (p >= (100 - (check.targetZoneWidth || 32)) || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1;
+                  check.targetZoneStart = Math.max(0, Math.min(100 - (check.targetZoneWidth || 32), p));
+              } else {
+                  let p = check.progress + (speed * physicsMult) * (check.direction || 1);
+                  if (p >= 100 || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1;
+                  check.progress = Math.max(0, Math.min(100, p));
+              }
               setActiveSkillCheck({...check});
           } else if (check.type === SkillCheckType.MASH) {
               if (check.progress >= 100) {
@@ -689,21 +707,23 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                   { id: 3, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60, value: 100, hit: false }
               ];
           }
+          const isSonic = move.id === 'sonic_boom';
           const check: ActiveSkillCheck = { 
               type: move.skillCheck, 
               move, 
               startTime: Date.now(), 
-              progress: move.skillCheck === SkillCheckType.DRAIN_GAME ? 100 : (move.skillCheck === SkillCheckType.TIMING ? 0 : 20), 
+              progress: isSonic ? 50 : (move.skillCheck === SkillCheckType.DRAIN_GAME ? 100 : (move.skillCheck === SkillCheckType.TIMING ? 0 : 20)), 
               direction: 1,
               stage: 1,
               reflexTargets,
               maxStages: move.skillCheck === SkillCheckType.COMBO ? 3 : 2,
-              targetZoneWidth: move.skillCheck === SkillCheckType.COMBO ? 38 : 15,
+              targetZoneWidth: move.skillCheck === SkillCheckType.COMBO ? 38 : (isSonic ? 32 : 18),
               targetZoneStart: move.skillCheck === SkillCheckType.COMBO ? Math.random() * 62 : 40,
               accumulatedMultiplier: 0,
               currentCombo: 0,
               hitMarkers: [],
-              isFlashing: false
+              isFlashing: false,
+              isMovingZone: isSonic
           };
           
           lastFrameTimeRef.current = Date.now();
@@ -728,7 +748,18 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           check.progress = Math.min(100, check.progress + 8);
           setActiveSkillCheck({...check});
       } else if (check.type === SkillCheckType.TIMING) {
-          resolveMinigame();
+          if (check.isMovingZone) {
+              const marker = { id: Date.now(), progress: 50 };
+              check.isFlashing = true;
+              check.hitMarkers = [marker];
+              setActiveSkillCheck({...check});
+              skillCheckRef.current = check;
+              setTimeout(() => {
+                  resolveMinigame();
+              }, 100);
+          } else {
+              resolveMinigame();
+          }
       } else if (check.type === SkillCheckType.COMBO || check.type === SkillCheckType.DRAIN_GAME) {
           advanceComboStage();
       }
@@ -766,7 +797,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           else if (avgValue >= 30) { multiplier = 1.2; text = "GOOD"; color = "text-cyan-400"; } 
           else { multiplier = 0.8; text = "SLOW"; color = "text-slate-400"; }
 
-          spawnFloatingText(text, 'opponent', -50, -80, color, 2);
+          spawnFloatingText(text, 'opponent', -50, -100, color, 2);
           
           const finalCooldown = multiplier >= 1.2 ? check.move.cooldown / 2 : check.move.cooldown;
           triggerCooldown(check.move.id, finalCooldown);

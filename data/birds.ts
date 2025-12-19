@@ -25,7 +25,7 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
       description: 'Regenerates Energy 50% faster.'
     },
     moves: [
-      { id: 'rapid_peck', name: 'Rapid Peck', description: 'Quick 3-hit combo combo.', type: MoveType.ATTACK, power: 38, cost: 10, accuracy: 95, cooldown: 4000, skillCheck: SkillCheckType.COMBO },
+      { id: 'rapid_peck', name: 'Rapid Peck', description: 'Quick 3-hit combo combo.', type: MoveType.ATTACK, power: 65, cost: 10, accuracy: 95, cooldown: 4000, skillCheck: SkillCheckType.COMBO },
       { id: 'evasive_maneuvers', name: 'Evasive Maneuvers', description: 'Increases evasion.', type: MoveType.DEFENSE, power: 0, cost: 15, accuracy: 100, effect: 'dodge', cooldown: 12000, skillCheck: SkillCheckType.REFLEX },
       { id: 'nectar_sip', name: 'Nectar Sip', description: 'Restore HP.', type: MoveType.HEAL, power: 20, cost: 25, accuracy: 100, cooldown: 18000, skillCheck: SkillCheckType.REFLEX }, 
       { id: 'sonic_boom', name: 'Sonic Boom', description: 'High altitude sonic wave.', type: MoveType.SPECIAL, power: 55, cost: 45, accuracy: 90, requiresHeight: true, cooldown: 12000, skillCheck: SkillCheckType.TIMING }
