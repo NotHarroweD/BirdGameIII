@@ -163,50 +163,21 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                             </AnimatePresence>
                         </div>
 
-                        <div className={`w-[85%] border-4 border-slate-700 rounded-xl relative overflow-hidden bg-slate-950 shadow-2xl mb-4 ${activeSkillCheck.isMovingZone ? 'h-8' : 'h-24'}`}>
+                        <div className={`w-[85%] border-4 border-slate-700 rounded-xl relative overflow-hidden bg-slate-950 shadow-2xl mb-4 ${activeSkillCheck.isMovingZone ? 'h-10' : 'h-24'}`}>
                             {activeSkillCheck.type === SkillCheckType.TIMING || activeSkillCheck.type === SkillCheckType.COMBO ? (
                                 <>
-                                    {/* Sonic Boom Moving Zone with discrete segments */}
                                     <motion.div 
-                                        className={`absolute h-full ${activeSkillCheck.isMovingZone ? 'border-x-4 border-rose-600 shadow-[0_0_15px_rgba(225,29,72,0.5)]' : ''}`} 
+                                        className={`absolute h-full ${activeSkillCheck.isMovingZone ? 'border-x-4 border-rose-600 shadow-[0_0_15px_rgba(225,29,72,0.5)]' : ''} ${activeSkillCheck.isFlashing ? (activeSkillCheck.flashColor === 'red' ? 'bg-rose-600 z-20' : 'bg-white z-20') : ''}`} 
                                         style={{ 
                                             left: `${activeSkillCheck.targetZoneStart ?? 40}%`, 
                                             width: `${activeSkillCheck.targetZoneWidth ?? 15}%`,
                                             background: activeSkillCheck.isMovingZone 
                                                 ? 'linear-gradient(to right, #ef4444 0%, #ef4444 20%, #facc15 20%, #facc15 40%, #10b981 40%, #10b981 60%, #facc15 60%, #facc15 80%, #ef4444 80%, #ef4444 100%)'
-                                                : 'rgba(16, 185, 129, 0.4)'
+                                                : activeSkillCheck.isFlashing ? undefined : 'rgba(16, 185, 129, 0.4)'
                                         }}
-                                    >
-                                        {/* Divider Lines for Sonic Boom */}
-                                        {activeSkillCheck.isMovingZone && (
-                                            <>
-                                                <div className="absolute left-[20%] top-0 bottom-0 w-px bg-black/40" />
-                                                <div className="absolute left-[40%] top-0 bottom-0 w-px bg-black/40" />
-                                                <div className="absolute left-[60%] top-0 bottom-0 w-px bg-black/40" />
-                                                <div className="absolute left-[80%] top-0 bottom-0 w-px bg-black/40" />
-                                            </>
-                                        )}
-                                    </motion.div>
-
-                                    {/* Success/Fail Outline Flash for Combo & Timing */}
-                                    <AnimatePresence>
-                                        {activeSkillCheck.isFlashing && (
-                                            <motion.div 
-                                                initial={{ opacity: 0, scale: 1.05 }}
-                                                animate={{ opacity: [1, 0], scale: 1.2 }}
-                                                exit={{ opacity: 0 }}
-                                                transition={{ duration: 0.25 }}
-                                                className={`absolute inset-0 z-40 border-4 ${activeSkillCheck.flashColor === 'red' ? 'border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.8)]' : 'border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.8)]'}`}
-                                                style={{ 
-                                                    left: `${activeSkillCheck.targetZoneStart ?? 40}%`, 
-                                                    width: `${activeSkillCheck.targetZoneWidth ?? 15}%`,
-                                                    height: '100%',
-                                                    top: 0
-                                                }}
-                                            />
-                                        )}
-                                    </AnimatePresence>
-
+                                        animate={activeSkillCheck.isFlashing ? { opacity: [1, 0.4, 1] } : {}}
+                                        transition={{ duration: 0.05, repeat: 1 }}
+                                    />
                                     <AnimatePresence>
                                         {activeSkillCheck.hitMarkers?.map((marker) => (
                                             <motion.div 
@@ -219,7 +190,6 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                                             />
                                         ))}
                                     </AnimatePresence>
-                                    
                                     <motion.div 
                                         className={`absolute h-full shadow-[0_0_20px_white] z-30 ${activeSkillCheck.type === SkillCheckType.COMBO ? 'bg-purple-400 w-4' : 'bg-white w-1.5'}`} 
                                         style={{left: `${activeSkillCheck.isMovingZone ? 50 : activeSkillCheck.progress}%`, transform: 'translateX(-50%)' }} 

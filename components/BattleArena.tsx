@@ -378,9 +378,9 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
               const targetMid = (check.targetZoneStart || 40) + (check.targetZoneWidth || 32) / 2;
               const diff = Math.abs(50 - targetMid);
               const halfWidth = (check.targetZoneWidth || 32) / 2;
-              if (diff <= halfWidth / 6) multiplier = 3.0;
-              else if (diff <= halfWidth / 3) multiplier = 2.2;
-              else if (diff <= halfWidth / 1.5) multiplier = 1.6;
+              if (diff <= halfWidth / 5) multiplier = 2.8;
+              else if (diff <= halfWidth / 2.5) multiplier = 2.0;
+              else if (diff <= halfWidth / 1.5) multiplier = 1.5;
               else if (diff <= halfWidth) multiplier = 1.2;
               else multiplier = 0.5;
           } else {
