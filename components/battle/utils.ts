@@ -1,5 +1,10 @@
+import { BirdInstance, EnemyPrefix, Gear, GearPrefix, MoveType, Rarity, StatBonus, StatType } from '../../types';
+import { RARITY_CONFIG } from '../../constants';
 
-import { BirdInstance, EnemyPrefix, Gear, GearPrefix, MoveType, StatBonus, StatType } from '../../types';
+export const calculateYield = (bird: BirdInstance, level: number) => {
+    const rarityConfig = RARITY_CONFIG[bird.rarity];
+    return (bird.huntingConfig.baseRate * rarityConfig.minMult) * (1 + level * 0.5);
+};
 
 export const ENEMY_TYPE_INFO: Record<EnemyPrefix, { description: string, stats: string, rewards: string }> = {
     [EnemyPrefix.NONE]: { description: 'Standard Enemy', stats: 'Base Stats', rewards: 'Standard' },
@@ -100,14 +105,10 @@ export const getScaledStats = (bird: BirdInstance, level: number, isEnemy: boole
 
 export const getReflexColor = (type: MoveType, value: number) => {
     const t = value / 100;
-    // Start Colors (Emerald for Heal, Cyan for Shield)
     const start = type === MoveType.HEAL ? [16, 185, 129] : [6, 182, 212];
-    // End Color (Rose-600)
     const end = [225, 29, 72]; 
-    
     const r = Math.round(end[0] + (start[0] - end[0]) * t);
     const g = Math.round(end[1] + (start[1] - end[1]) * t);
     const b = Math.round(end[2] + (start[2] - end[2]) * t);
-    
     return `rgb(${r}, ${g}, ${b})`;
 };

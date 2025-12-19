@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { BattleBird, Weather, Altitude } from '../types';
 
@@ -17,11 +18,10 @@ export const getAITurn = async (
   recentLogs: string[]
 ): Promise<AITurnResult> => {
   try {
-    // Initialize inside the function to prevent startup errors
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const model = 'gemini-2.5-flash';
+    // Corrected model name to 'gemini-3-flash-preview' for basic text tasks per guidelines.
+    const model = 'gemini-3-flash-preview';
     
-    // Construct the context for the AI
     const availableMovesInfo = aiBird.moves.map(m => 
       `- ${m.id}: "${m.name}" (${m.type}, Cost: ${m.cost}, Power: ${m.power}) - ${m.description} ${m.requiresHeight ? '[REQUIRES HIGH ALT]' : ''}`
     ).join('\n');
@@ -90,7 +90,6 @@ export const getAITurn = async (
     
     const result = JSON.parse(text);
     
-    // Validation fallback
     const validAltitude = [0, 1, 2].includes(result.desiredAltitude) ? result.desiredAltitude : aiBird.altitude;
     
     return {

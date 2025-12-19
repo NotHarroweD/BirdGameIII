@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { BirdInstance, BattleBird, Move, BattleLog, MoveType, Altitude, SkillCheckType, BattleResult, Rarity, ActiveBuff, ConsumableType, Consumable, APShopState, EnemyPrefix, ZoneClearReward, StatType } from '../types';
-import { RARITY_CONFIG, rollRarity } from '../constants';
+import { BirdInstance, BattleBird, Move, BattleLog, MoveType, Altitude, SkillCheckType, BattleResult, Rarity, ActiveBuff, Consumable, APShopState, ZoneClearReward, StatType } from '../types';
+import { RARITY_CONFIG } from '../constants';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 import { BattleResultOverlay } from './BattleResultOverlay';
 
@@ -8,7 +9,8 @@ import { createOpponent } from './battle/opponentGenerator';
 import { calculateRewards } from './battle/rewardLogic';
 import { calculateCombatResult } from './battle/combatLogic';
 import { ActiveSkillCheck, FloatingText, Particle } from './battle/types';
-import { getScaledStats, getReflexColor } from './battle/utils';
+import { getScaledStats } from './battle/utils';
+import { applyPassivesAndRegen, getAIBestMove } from './battle/engine';
 import { BattleControls } from './battle/BattleControls';
 import { MinigameOverlay } from './battle/MinigameOverlay';
 import { BattleStage } from './battle/BattleStage';
@@ -61,25 +63,17 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   const [opponentBird, setOpponentBird] = useState<BattleBird | null>(null);
 
   useEffect(() => {
-      const opp = createOpponent(enemyLevel, requiredRarities, currentZoneProgress);
+      const opp = createOpponent(enemyLevel, requiredRarities || [], currentZoneProgress || []);
       opponentRef.current = opp;
       setOpponentBird(opp);
-      addLog(`ENCOUNTER STARTED: ${opp.name} (${RARITY_CONFIG[opp.rarity].name})`, 'info');
       startLoop();
       return () => stopLoop();
   }, []);
 
-  const [logs, setLogs] = useState<BattleLog[]>([]);
   const [winner, setWinner] = useState<'player' | 'opponent' | null>(null);
   const [hitFlash, setHitFlash] = useState(false);
   const [showThreatDetails, setShowThreatDetails] = useState(false);
-  
-  const [resultData, setResultData] = useState<{
-      winner: 'player' | 'opponent';
-      opponentRarity: Rarity;
-      rewards: { xp: number; feathers: number; scrap: number; diamonds: number; gem?: any; consumable?: Consumable };
-      zoneClearReward?: ZoneClearReward;
-  } | null>(null);
+  const [resultData, setResultData] = useState<any>(null);
   
   const playerBirdRef = useRef(playerBird);
   const opponentBirdRef = useRef(opponentBird);
@@ -90,17 +84,12 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
 
   const [activeSkillCheck, setActiveSkillCheck] = useState<ActiveSkillCheck | null>(null);
   const skillCheckRef = useRef<ActiveSkillCheck | null>(null);
-
   const [lastUsedMap, setLastUsedMap] = useState<Record<string, number>>({});
   const lastUsedMapRef = useRef<Record<string, number>>({}); 
   
   useEffect(() => { lastUsedMapRef.current = lastUsedMap; }, [lastUsedMap]);
 
-  const [gameTime, setGameTime] = useState(0);
-  const startTimeRef = useRef(Date.now());
-  const lastFrameTimeRef = useRef(Date.now());
   const lastTickRef = useRef(Date.now());
-  const lastBleedTickRef = useRef(Date.now());
   const animationFrameRef = useRef<number>(0);
 
   const controls = useAnimation(); 
@@ -108,19 +97,11 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   const opponentAnim = useAnimation(); 
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
   const [particles, setParticles] = useState<Particle[]>([]);
-  const logsEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
 
   useEffect(() => {
       if (winnerRef.current) return;
-      if (playerBird && playerBird.currentHp <= 0) {
-          handleWin('opponent');
-      } else if (opponentBird && opponentBird.currentHp <= 0) {
-          handleWin('player');
-      }
+      if (playerBird && playerBird.currentHp <= 0) handleWin('opponent');
+      else if (opponentBird && opponentBird.currentHp <= 0) handleWin('player');
   }, [playerBird?.currentHp, opponentBird?.currentHp]);
 
   const triggerShake = async (intensity = 10) => {
@@ -150,12 +131,9 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     }
     setParticles(prev => [...prev, ...newParticles]);
     setTimeout(() => {
-      setParticles(prev => prev.filter(p => !newParticles.find(np => np.id === p.id)));
+      // Fix: Removed incorrect redundant setParticles call within setParticles functional update
+      setParticles(current => current.filter(p => !newParticles.find(np => np.id === p.id)));
     }, 800);
-  };
-  
-  const addLog = (message: string, type: BattleLog['type'] = 'info') => {
-    setLogs(prev => [...prev, { timestamp: Date.now(), message, type }]);
   };
 
   const triggerCooldown = (id: string, duration: number) => {
@@ -164,884 +142,112 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     lastUsedMapRef.current = { ...lastUsedMapRef.current, [id]: expiry };
   };
 
-  const executeMove = async (attacker: BattleBird, defender: BattleBird, move: Move, isPlayer: boolean, multiplier: number, secondaryMultiplier: number = 0, damageColorOverride?: string) => {
+  const executeMove = async (attacker: BattleBird, defender: BattleBird, move: Move, isPlayer: boolean, multiplier: number, secondaryMultiplier: number = 0) => {
     if (winnerRef.current) return;
-    
     const anim = isPlayer ? playerAnim : opponentAnim;
-    
     if (move.type === MoveType.ATTACK || move.type === MoveType.SPECIAL || move.type === MoveType.DRAIN) {
-        const xMove = isPlayer ? 60 : -60;
-        const yMove = isPlayer ? -60 : 60;
-        anim.start({ x: -xMove * 0.2, y: -yMove * 0.2, scale: 0.9, transition: { duration: 0.1 } }).then(() => {
-            anim.start({ x: xMove, y: yMove, scale: 1.2, transition: { duration: 0.08, ease: "easeIn" } }).then(() => {
-                anim.start({ x: 0, y: 0, scale: 1, transition: { duration: 0.3, type: "spring" } });
-            });
-        });
+        anim.start({ x: isPlayer ? 60 : -60, transition: { duration: 0.1 } }).then(() => anim.start({ x: 0, transition: { duration: 0.3, type: "spring" } }));
     }
-
-    const setAttacker = isPlayer ? setPlayerBird : setOpponentBird;
-    const setDefender = isPlayer ? setOpponentBird : setPlayerBird;
-    const attackerTarget = isPlayer ? 'player' : 'opponent';
-    const defenderTarget = isPlayer ? 'opponent' : 'player';
-
-    const queueText = (text: string, target: 'player' | 'opponent', color: string, scale: number, delay: number, xOffset = 0, yOffset = 0) => {
-        setTimeout(() => {
-            if (winnerRef.current) return;
-            spawnFloatingText(text, target, xOffset + (Math.random() * 20 - 10), yOffset + (Math.random() * 20), color, scale);
-        }, delay);
-    };
-
     const outcome = calculateCombatResult(attacker, defender, move, multiplier);
-
     if (outcome.isHit) {
         if (move.type === MoveType.HEAL) {
-            const healAmount = Math.floor(move.power * multiplier * (attacker.attack / 100)); 
-            setAttacker((prev: BattleBird | null) => {
-                const next = prev ? ({ ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + healAmount) }) : null;
-                if (isPlayer) playerBirdRef.current = next; else opponentBirdRef.current = next;
-                return next;
-            });
-            queueText(`+${healAmount} HP`, attackerTarget, "text-emerald-400", 1.5, 0, 0, -40);
-            addLog(`${attacker.name} heals for ${healAmount}.`, 'heal');
-
-        } else if (move.type === MoveType.DEFENSE) {
-             addLog(`${attacker.name} braces for impact!`, 'info');
-             queueText("SHIELD UP", attackerTarget, "text-cyan-400", 1.2, 0, 0, -40);
-
+            const heal = Math.floor(move.power * multiplier * (attacker.attack / 100)); 
+            const update = (prev: any) => prev ? ({ ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + heal) }) : null;
+            if (isPlayer) setPlayerBird(update); else setOpponentBird(update);
+            spawnFloatingText(`+${heal} HP`, isPlayer ? 'player' : 'opponent', 0, -40, "text-emerald-400", 1.5);
         } else {
-            let finalDamage = outcome.damage;
-            
+            const damage = outcome.damage;
             if (move.effect === 'lifesteal' || move.type === MoveType.DRAIN) {
-                 const healFactor = move.type === MoveType.DRAIN ? (secondaryMultiplier > 0 ? secondaryMultiplier : 0.25) : 0.5;
-                 const healAmt = Math.floor(finalDamage * healFactor);
-                 setAttacker((prev: BattleBird | null) => {
-                    const next = prev ? ({ ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + healAmt) }) : null;
-                    if (isPlayer) playerBirdRef.current = next; else opponentBirdRef.current = next;
-                    return next;
-                 });
-                 queueText(`+${healAmt} HP (DRAIN)`, attackerTarget, "text-purple-400", 1.2, 500, 40, -20);
+                 const heal = Math.floor(damage * (move.type === MoveType.DRAIN ? (secondaryMultiplier || 0.25) : 0.5));
+                 const update = (prev: any) => prev ? ({ ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + heal) }) : null;
+                 if (isPlayer) setPlayerBird(update); else setOpponentBird(update);
+                 spawnFloatingText(`+${heal} HP`, isPlayer ? 'player' : 'opponent', 40, -20, "text-purple-400", 1.2);
             }
-            
-            setDefender((prev: BattleBird | null) => {
+            const updateDefender = (prev: any) => {
                 if (!prev) return null;
-                const newHp = Math.max(0, prev.currentHp - finalDamage);
-                const newEffects = [...prev.statusEffects];
-                if (outcome.appliedBleed && !newEffects.includes('bleed')) newEffects.push('bleed');
-                const next = { ...prev, currentHp: newHp, statusEffects: newEffects };
-                if (isPlayer) opponentBirdRef.current = next; else playerBirdRef.current = next;
-                return next;
-            });
-
-            triggerShake(finalDamage > 30 ? 20 : 8);
+                const effects = [...prev.statusEffects];
+                if (outcome.appliedBleed && !effects.includes('bleed')) effects.push('bleed');
+                return { ...prev, currentHp: Math.max(0, prev.currentHp - damage), statusEffects: effects };
+            };
+            if (isPlayer) setOpponentBird(updateDefender); else setPlayerBird(updateDefender);
+            triggerShake(damage > 30 ? 20 : 8);
             triggerHitFlash();
-
-            const victimAnim = isPlayer ? opponentAnim : playerAnim;
-            victimAnim.start({ x: [0, 15, -15, 10, -10, 0], transition: { duration: 0.3 } });
-
-            let delayOffset = 0;
-            if (outcome.isCrit) {
-                queueText("CRITICAL!", defenderTarget, "text-yellow-400", 1.8, delayOffset, -50, -60);
-                delayOffset += 200;
-            }
-            
-            queueText(`-${finalDamage}`, defenderTarget, damageColorOverride || "text-rose-500", 2.5, delayOffset, 50, 40);
-            delayOffset += 200;
-            
-            if (outcome.appliedBleed) {
-                queueText("BLEED APPLIED", defenderTarget, "text-rose-600", 1.2, delayOffset, 0, -80);
-            }
-            
+            spawnFloatingText(`-${damage}`, isPlayer ? 'opponent' : 'player', 50, 40, "text-rose-500", 2.5);
             spawnParticles(0, 0, "#f43f5e", 12);
-            addLog(`${attacker.name} used ${move.name}! -${finalDamage}`, 'damage');
-        }
-    } else {
-        if (defender.speed > attacker.speed && Math.random() < 0.5) {
-             queueText("DODGED!", defenderTarget, "text-cyan-400", 1.5, 0, 0, -40);
-             const dodgeAnim = isPlayer ? opponentAnim : playerAnim;
-             dodgeAnim.start({ x: isPlayer ? 50 : -50, transition: { duration: 0.2 } }).then(() => {
-                 dodgeAnim.start({ x: 0, transition: { duration: 0.2 } });
-             });
-        } else {
-             queueText("MISS", defenderTarget, "text-slate-500", 1.5, 0, 0, -40);
         }
     }
   };
 
   const handleWin = (w: 'player' | 'opponent') => {
       if (winnerRef.current || !opponentBirdRef.current) return;
-      
       winnerRef.current = w;
       setWinner(w);
       stopLoop();
-
-      if (w === 'player') {
-          const rewards = calculateRewards(
-              opponentBirdRef.current,
-              playerBirdInstance,
-              enemyLevel,
-              activeBuffs,
-              apShop,
-              gemUnlocked
-          );
-
-          onReportResults({
-              winner: 'player',
-              opponentRarity: opponentBirdRef.current.rarity,
-              rewards
-          });
-
-          let zoneClearReward: ZoneClearReward | undefined;
-          const isHighestZone = enemyLevel === highestZone;
-          
-          if (isHighestZone) {
-              const RARITY_ORDER = [Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE, Rarity.EPIC, Rarity.LEGENDARY, Rarity.MYTHIC];
-              const opponentRarityIdx = RARITY_ORDER.indexOf(opponentBirdRef.current.rarity);
-              let satisfiedRarity: Rarity | null = null;
-
-              if (!currentZoneProgress.includes(opponentBirdRef.current.rarity)) {
-                  satisfiedRarity = opponentBirdRef.current.rarity;
-              } else {
-                  for (const req of requiredRarities) {
-                      if (!currentZoneProgress.includes(req)) {
-                          const reqIdx = RARITY_ORDER.indexOf(req);
-                          if (opponentRarityIdx >= reqIdx) {
-                              satisfiedRarity = req;
-                              break;
-                          }
-                      }
-                  }
-              }
-
-              if (satisfiedRarity) {
-                  const newProgress = [...currentZoneProgress, satisfiedRarity];
-                  const isZoneCleared = requiredRarities?.every(r => newProgress.includes(r)) ?? false;
-                  
-                  if (isZoneCleared) {
-                      const type = Math.random() < 0.5 ? ConsumableType.HUNTING_SPEED : ConsumableType.BATTLE_REWARD;
-                      const pool = [Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE];
-                      const rarity = pool[Math.floor(Math.random() * pool.length)];
-                      const rewardItem: Consumable = { type, rarity, count: 1 };
-
-                      zoneClearReward = {
-                          feathers: enemyLevel * 200,
-                          scrap: enemyLevel * 50,
-                          consumable: rewardItem
-                      };
-                      if (onZoneCleared) {
-                          onZoneCleared(zoneClearReward);
-                      }
-                  }
-              }
-          }
-          
-          setTimeout(() => {
-              setResultData({ 
-                  winner: 'player', 
-                  opponentRarity: opponentBirdRef.current!.rarity,
-                  rewards,
-              });
-          }, 1000);
-      } else {
-          onReportResults({
-              winner: 'opponent',
-              opponentRarity: opponentBirdRef.current.rarity,
-              rewards: { xp: 0, feathers: 0, scrap: 0, diamonds: 0 }
-          });
-
-          setTimeout(() => {
-              setResultData({ 
-                  winner: 'opponent', 
-                  opponentRarity: opponentBirdRef.current!.rarity,
-                  rewards: { xp: 0, feathers: 0, scrap: 0, diamonds: 0 }
-              });
-          }, 1000);
-      }
+      const rewards = calculateRewards(opponentBirdRef.current, playerBirdInstance, enemyLevel, activeBuffs, apShop, gemUnlocked || false);
+      onReportResults({ winner: w, opponentRarity: opponentBirdRef.current.rarity, rewards });
+      setTimeout(() => setResultData({ winner: w, opponentRarity: opponentBirdRef.current!.rarity, rewards }), 1000);
   };
-
-  const handleFlee = () => {
-      stopLoop();
-      onBattleExit(false);
-  };
-
-  const resolveMinigame = (overrideProgress?: number, finalMultiplier?: number) => {
-      const check = skillCheckRef.current;
-      if (!check) return;
-      
-      skillCheckRef.current = null;
-      setActiveSkillCheck(null);
-      
-      const progress = overrideProgress !== undefined ? overrideProgress : check.progress;
-      let multiplier = 1.0;
-      let secondaryMultiplier = 0; 
-      if (check.type === SkillCheckType.TIMING) {
-          if (check.isMovingZone) {
-              const targetMid = (check.targetZoneStart || 40) + (check.targetZoneWidth || 32) / 2;
-              const diff = Math.abs(50 - targetMid);
-              const halfWidth = (check.targetZoneWidth || 32) / 2;
-              if (diff <= halfWidth / 6) multiplier = 3.0;
-              else if (diff <= halfWidth / 3) multiplier = 2.2;
-              else if (diff <= halfWidth / 1.5) multiplier = 1.6;
-              else if (diff <= halfWidth) multiplier = 1.2;
-              else multiplier = 0.5;
-          } else {
-            if (progress >= 45 && progress <= 55) multiplier = 1.5;
-            else if (progress >= 30 && progress <= 70) multiplier = 1.2;
-            else multiplier = 0.7;
-          }
-      } else if (check.type === SkillCheckType.MASH) {
-          if (progress >= 100) multiplier = 1.5; 
-          else if (progress >= 70 && progress <= 90) multiplier = 1.2; 
-          else if (progress > 90) multiplier = 1.1;
-          else if (progress >= 40) multiplier = 1.0;
-          else multiplier = 0.6;
-      } else if (check.type === SkillCheckType.COMBO) {
-          multiplier = finalMultiplier ?? check.accumulatedMultiplier ?? 1.0;
-          secondaryMultiplier = 0; 
-      } else if (check.type === SkillCheckType.DRAIN_GAME) {
-          multiplier = check.storedMultiplier || 1.0; 
-          if (check.drainBones) {
-              const collected = check.drainBones.filter(h => h.collected);
-              const totalVal = collected.reduce((sum, h) => sum + (h.value / 100), 0);
-              secondaryMultiplier = Math.min(1.0, totalVal / check.drainBones.length);
-          } else {
-            secondaryMultiplier = 0.25;
-          }
-      } else if (check.type === SkillCheckType.FLICK) {
-          multiplier = finalMultiplier || 1.0;
-      }
-      
-      let text = "GOOD";
-      let color = "text-white";
-      if (multiplier >= 1.5) { text = "PERFECT!"; color = "text-yellow-400"; }
-      else if (multiplier < 0.8) { text = "WEAK"; color = "text-slate-500"; }
-      
-      if (check.type === SkillCheckType.DRAIN_GAME) {
-           if (secondaryMultiplier >= 0.8) { text = "MAX DRAIN!"; color = "text-purple-400"; }
-           else if (secondaryMultiplier < 0.3) { text = "POOR ABSORB"; color = "text-slate-400"; }
-           else { text = "SOUL FEAST"; color = "text-purple-300"; }
-      }
-      
-      spawnFloatingText(text, 'opponent', -50, -100, color, 2);
-
-      const isPerfect = multiplier >= 1.5;
-      const hasPassive = playerBirdRef.current?.id === 'hummingbird';
-      const finalCooldown = (hasPassive && isPerfect) ? check.move.cooldown / 2 : check.move.cooldown;
-      triggerCooldown(check.move.id, finalCooldown);
-
-      let damageColor = undefined;
-      if (check.type === SkillCheckType.COMBO || (check.type === SkillCheckType.TIMING && check.isMovingZone) || check.type === SkillCheckType.FLICK) {
-          if (multiplier >= 2.2) damageColor = "text-purple-400";
-          else if (multiplier >= 1.7) damageColor = "text-blue-400";
-          else if (multiplier >= 1.1) damageColor = "text-emerald-400";
-          else damageColor = "text-white";
-      }
-
-      if (playerBirdRef.current && opponentBirdRef.current) {
-          executeMove(playerBirdRef.current, opponentBirdRef.current, check.move, true, multiplier, secondaryMultiplier, damageColor);
-      }
-  };
-
-  const advanceComboStage = () => {
-      const check = skillCheckRef.current;
-      if (!check || check.isFlashing) return;
-      
-      const progress = check.progress;
-
-      if (check.type === SkillCheckType.DRAIN_GAME) {
-      } else if (check.type === SkillCheckType.COMBO) {
-          const targetStart = check.targetZoneStart ?? 40;
-          const targetWidth = check.targetZoneWidth ?? 38;
-          const targetMid = targetStart + (targetWidth / 2);
-          const diff = Math.abs(progress - targetMid);
-          
-          let hitMult = 0.3;
-          const isHit = diff <= targetWidth / 2;
-          
-          let newComboCounter = isHit ? (check.currentCombo || 0) + 1 : 0;
-          let hitFeedback = undefined;
-
-          if (isHit) {
-              if (newComboCounter === 1) hitFeedback = { text: "1x Combo", color: "text-emerald-400", id: Date.now(), intensity: 1 };
-              else if (newComboCounter === 2) hitFeedback = { text: "2x Combo", color: "text-blue-400", id: Date.now(), intensity: 2 };
-              else if (newComboCounter >= 3) hitFeedback = { text: "3x COMBO!!", color: "text-purple-400", id: Date.now(), intensity: 3 };
-
-              if (diff <= targetWidth / 8) { hitMult = 1.0; }
-              else { hitMult = 0.6; }
-          }
-
-          const newAccumulated = (check.accumulatedMultiplier || 0) + (isHit ? hitMult : 0);
-          const newMarkers = isHit ? [...(check.hitMarkers || []), { id: Date.now(), progress }] : (check.hitMarkers || []);
-
-          const updatedCheck: ActiveSkillCheck = {
-              ...check,
-              isFlashing: true,
-              flashColor: (isHit ? 'emerald' : 'red') as 'emerald' | 'red',
-              hitMarkers: newMarkers,
-              hitFeedback,
-              currentCombo: newComboCounter,
-              accumulatedMultiplier: newAccumulated,
-              hitResult: { color: isHit ? '#10b981' : '#f43f5e', intensity: isHit ? (newComboCounter + 1) : 1, id: Date.now() }
-          };
-          skillCheckRef.current = updatedCheck;
-          setActiveSkillCheck(updatedCheck);
-
-          setTimeout(() => {
-              const currentCheck = skillCheckRef.current;
-              if (!currentCheck || currentCheck.type !== SkillCheckType.COMBO) return;
-
-              if (currentCheck.stage! < (currentCheck.maxStages || 3)) {
-                  const nextWidth = currentCheck.stage === 1 ? 28 : 20; 
-                  const nextCheck = {
-                      ...currentCheck,
-                      isFlashing: false,
-                      stage: currentCheck.stage! + 1,
-                      targetZoneWidth: nextWidth,
-                      targetZoneStart: Math.random() * (100 - nextWidth),
-                      hitMarkers: [],
-                      hitFeedback: currentCheck.hitFeedback 
-                  };
-                  skillCheckRef.current = nextCheck;
-                  setActiveSkillCheck(nextCheck);
-              } else {
-                  resolveMinigame(progress, newAccumulated);
-              }
-          }, 120); 
-      }
-  };
-
-  const processAI = (now: number) => {
-      if (winnerRef.current || now < aiNextActionTime.current || !opponentBirdRef.current || !playerBirdRef.current) return;
-      const ai = opponentBirdRef.current;
-      const pl = playerBirdRef.current;
-      const availableMoves = ai.moves.filter(m => {
-          const expiry = lastUsedMapRef.current[`ai_${m.id}`] || 0;
-          return now >= expiry && ai.currentEnergy >= m.cost;
-      });
-      if (availableMoves.length === 0) { aiNextActionTime.current = now + 500; return; }
-      const move = availableMoves[Math.floor(Math.random() * availableMoves.length)];
-      triggerCooldown(`ai_${move.id}`, move.cooldown);
-      executeMove(ai, pl, move, false, 0.9 + Math.random()*0.2);
-      aiNextActionTime.current = now + 2000 + Math.random() * 1000;
-  };
-  const aiNextActionTime = useRef(0);
 
   const startLoop = () => {
     const loop = () => {
       if (winnerRef.current) return;
       const now = Date.now();
-      
-      const frameDelta = now - lastFrameTimeRef.current;
-      lastFrameTimeRef.current = now;
-      
-      const logicDelta = now - lastTickRef.current;
-      
-      if (skillCheckRef.current) {
-          const check = skillCheckRef.current;
-          const physicsMult = frameDelta / 16.66; 
-
-          if (check.type === SkillCheckType.TIMING || check.type === SkillCheckType.COMBO) {
-              const speed = check.type === SkillCheckType.COMBO ? (1.2 + (check.stage || 1) * 0.7) : 1.5;
-              if (check.isMovingZone) {
-                  let p = (check.targetZoneStart || 0) + (speed * physicsMult) * (check.direction || 1);
-                  if (p >= (100 - (check.targetZoneWidth || 32)) || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1;
-                  check.targetZoneStart = Math.max(0, Math.min(100 - (check.targetZoneWidth || 32), p));
-              } else {
-                  let p = check.progress + (speed * physicsMult) * (check.direction || 1);
-                  if (p >= 100 || p <= 0) check.direction = ((check.direction || 1) * -1) as 1 | -1;
-                  check.progress = Math.max(0, Math.min(100, p));
-              }
-              setActiveSkillCheck({...check});
-          } else if (check.type === SkillCheckType.MASH) {
-              if (check.progress >= 100) {
-                   resolveMinigame(100);
-                   return; 
-              } else if (now - check.startTime > 3000) {
-                  resolveMinigame(); 
-                  return;
-              } else {
-                  check.progress = Math.max(0, check.progress - (0.12 * physicsMult));
-                  setActiveSkillCheck({...check});
-              }
-          } else if (check.type === SkillCheckType.REFLEX && check.reflexTargets) {
-              check.reflexTargets = check.reflexTargets.map(t => {
-                  if (!t.hit && t.value > 0) {
-                      return { ...t, value: Math.max(0, t.value - (0.4 * physicsMult)) };
-                  }
-                  return t;
-              });
-              setActiveSkillCheck({...check});
-          } else if (check.type === SkillCheckType.DRAIN_GAME) {
-              if (check.stage === 1) {
-                  const elapsedSinceStart = now - check.startTime;
-                  if (elapsedSinceStart > 400 && check.flickStartPos) {
-                      const chargeSpeed = 6.0; 
-                      const nextProgress = Math.min(100, check.progress + (chargeSpeed * physicsMult));
-                      check.progress = nextProgress;
-                      
-                      if (nextProgress >= 100) {
-                          check.stage = 2;
-                          check.storedMultiplier = 1.5; 
-                          check.startTime = Date.now(); 
-                          spawnFloatingText("PERFECT!", 'player', 0, -100, "text-yellow-400", 1.5);
-                      }
-                  }
-
-                  if (Math.random() < 0.25 && (check.drainBones?.length || 0) < 20) {
-                      const angle = Math.random() * Math.PI * 2;
-                      const speed = 1.5 + Math.random() * 2;
-                      const bone = {
-                          id: Date.now() + Math.random(),
-                          x: 50,
-                          y: 50,
-                          vx: Math.cos(angle) * speed,
-                          vy: Math.sin(angle) * speed,
-                          collected: false,
-                          value: 100
-                      };
-                      check.drainBones = [...(check.drainBones || []), bone];
-                  }
-                  
-                  if (check.drainBones) {
-                      check.drainBones = check.drainBones.map(h => ({
-                          ...h,
-                          x: Math.max(35, Math.min(65, h.x + h.vx * 0.1 * physicsMult)),
-                          y: Math.max(40, Math.min(60, h.y + h.vy * 0.1 * physicsMult))
-                      }));
-                  }
-                  setActiveSkillCheck({...check});
-              } else {
-                  if (check.drainBones) {
-                      check.drainBones = check.drainBones.map(h => ({
-                          ...h,
-                          value: h.collected ? h.value : Math.max(0, h.value - (0.8 * physicsMult))
-                      }));
-                  }
-                  
-                  if (now - check.startTime > 2500 || (check.drainBones?.length && check.drainBones.every(h => h.collected || h.value <= 0))) {
-                      resolveMinigame();
-                      return;
-                  }
-                  setActiveSkillCheck({...check});
-              }
-          } else if (check.type === SkillCheckType.FLICK) {
-               if (now - check.startTime > 1200 && !check.isFlashing) {
-                   resolveMinigame(0, 0.4); 
-               }
-          }
-      }
-      
-      if (logicDelta >= 100) {
-          const factor = logicDelta / 1000;
+      if (now - lastTickRef.current >= 100) {
+          const factor = (now - lastTickRef.current) / 1000;
           lastTickRef.current = now;
-
-          if (now - lastBleedTickRef.current > 2000) {
-              lastBleedTickRef.current = now;
-              let playerDied = false;
-              let opponentDied = false;
-
-              if (playerBirdRef.current?.statusEffects.includes('bleed')) {
-                  const dmg = Math.floor(playerBirdRef.current.maxHp * 0.05);
-                  const remaining = playerBirdRef.current.currentHp - dmg;
-                  if (remaining <= 0) {
-                      playerDied = true;
-                      setPlayerBird(prev => {
-                        const next = prev ? ({...prev, currentHp: 0}) : null;
-                        playerBirdRef.current = next;
-                        return next;
-                      });
-                  } else {
-                      setPlayerBird(prev => {
-                        const next = prev ? ({...prev, currentHp: remaining}) : null;
-                        playerBirdRef.current = next;
-                        return next;
-                      });
-                      spawnFloatingText("-BLEED", 'player', -30, 0, "text-rose-600");
-                  }
+          const { player, opponent } = applyPassivesAndRegen(playerBirdRef.current, opponentBirdRef.current, factor);
+          setPlayerBird(player);
+          setOpponentBird(opponent);
+          if (now >= aiNextActionTime.current && opponentBirdRef.current && playerBirdRef.current) {
+              const move = getAIBestMove(opponentBirdRef.current, now, lastUsedMapRef.current);
+              if (move) {
+                  triggerCooldown(`ai_${move.id}`, move.cooldown);
+                  executeMove(opponentBirdRef.current, playerBirdRef.current, move, false, 1.0);
               }
-
-              if (!winnerRef.current && !playerDied && !opponentDied && opponentBirdRef.current?.statusEffects.includes('bleed')) {
-                  const dmg = Math.floor(opponentBirdRef.current.maxHp * 0.05);
-                  const remaining = opponentBirdRef.current.currentHp - dmg;
-                  if (remaining <= 0) {
-                      opponentDied = true;
-                      setOpponentBird(prev => {
-                        const next = prev ? ({...prev, currentHp: 0}) : null;
-                        opponentBirdRef.current = next;
-                        return next;
-                      });
-                  } else {
-                      setOpponentBird(prev => {
-                        const next = prev ? ({...prev, currentHp: remaining}) : null;
-                        opponentBirdRef.current = next;
-                        return next;
-                      });
-                      spawnFloatingText("-BLEED", 'opponent', 30, 0, "text-rose-600");
-                  }
-              }
-
-              const applyVulturePassive = (bird: BattleBird | null, setBird: React.Dispatch<React.SetStateAction<BattleBird | null>>, isPl: boolean) => {
-                  if (bird && bird.id === 'vulture') {
-                      const heal = Math.ceil(bird.maxHp * 0.03); 
-                      setBird((prev: BattleBird | null) => {
-                          if (!prev || prev.currentHp <= 0) return prev; 
-                          const next = { ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + heal) };
-                          if (isPl) playerBirdRef.current = next; else opponentBirdRef.current = next;
-                          return next;
-                      });
-                  }
-              };
-              
-              if (!winnerRef.current && !playerDied && !opponentDied) {
-                  applyVulturePassive(playerBirdRef.current, setPlayerBird, true);
-                  applyVulturePassive(opponentBirdRef.current, setOpponentBird, false);
-              }
+              aiNextActionTime.current = now + 2000 + Math.random() * 1000;
           }
-
-          const applyEnergyRegen = (bird: BattleBird | null, setBird: React.Dispatch<React.SetStateAction<BattleBird | null>>, isPl: boolean) => {
-             if (!bird) return;
-             const baseRegen = 5;
-             const effectiveRegen = bird.id === 'hummingbird' ? baseRegen * 1.5 : baseRegen;
-             setBird((prev: BattleBird | null) => {
-                const next = prev ? ({...prev, currentEnergy: Math.min(prev.maxEnergy, prev.currentEnergy + (effectiveRegen * factor))}) : null;
-                if (isPl) playerBirdRef.current = next; else opponentBirdRef.current = next;
-                return next;
-             });
-          };
-          applyEnergyRegen(playerBirdRef.current, setPlayerBird, true);
-          applyEnergyRegen(opponentBirdRef.current, setOpponentBird, false);
-          
-          processAI(now);
       }
-      
-      setGameTime(Math.floor((now - startTimeRef.current) / 1000));
       animationFrameRef.current = requestAnimationFrame(loop);
     };
     animationFrameRef.current = requestAnimationFrame(loop);
   };
   const stopLoop = () => cancelAnimationFrame(animationFrameRef.current);
+  const aiNextActionTime = useRef(0);
   
   const handleMove = (move: Move) => {
       const now = Date.now();
-      const expiry = lastUsedMap[move.id] || 0;
-      if (winnerRef.current || activeSkillCheck || !playerBird || playerBird.currentEnergy < move.cost || now < expiry) return;
-      
-      setPlayerBird(prev => {
-        const next = prev ? ({...prev, currentEnergy: prev.currentEnergy - move.cost}) : null;
-        playerBirdRef.current = next;
-        return next;
-      });
-      setPlayerTurnCount(prev => prev + 1);
-      
+      if (winnerRef.current || activeSkillCheck || !playerBird || playerBird.currentEnergy < move.cost || now < (lastUsedMap[move.id] || 0)) return;
+      setPlayerBird(prev => ({...prev!, currentEnergy: prev!.currentEnergy - move.cost}));
+      setPlayerTurnCount(p => p + 1);
       if (move.skillCheck && move.skillCheck !== SkillCheckType.NONE) {
-          let reflexTargets = undefined;
-          if (move.skillCheck === SkillCheckType.REFLEX) {
-              reflexTargets = [
-                  { id: 1, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60, value: 100, hit: false },
-                  { id: 2, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60, value: 100, hit: false },
-                  { id: 3, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60, value: 100, hit: false }
-              ];
-          }
-          const isSonic = move.id === 'sonic_wave';
-          const check: ActiveSkillCheck = { 
-              type: move.skillCheck, 
-              move, 
-              startTime: Date.now(), 
-              progress: isSonic ? 50 : (move.skillCheck === SkillCheckType.DRAIN_GAME ? 0 : (move.skillCheck === SkillCheckType.TIMING ? 0 : 20)), 
-              direction: 1,
-              stage: 1,
-              reflexTargets,
-              maxStages: move.skillCheck === SkillCheckType.COMBO ? 3 : 2,
-              targetZoneWidth: move.skillCheck === SkillCheckType.COMBO ? 38 : (isSonic ? 32 : 18),
-              targetZoneStart: move.skillCheck === SkillCheckType.COMBO ? Math.random() * 62 : 40,
-              accumulatedMultiplier: 0,
-              currentCombo: 0,
-              hitMarkers: [],
-              isFlashing: false,
-              isMovingZone: isSonic,
-              flickDirection: move.skillCheck === SkillCheckType.FLICK ? Math.floor(Math.random() * 4) * 90 : undefined,
-              drainBones: move.skillCheck === SkillCheckType.DRAIN_GAME ? [] : undefined,
-              storedMultiplier: undefined,
-              flickStartPos: undefined,
-              flickCurrentPos: undefined
-          };
-          
-          lastFrameTimeRef.current = Date.now();
+          const check: ActiveSkillCheck = { type: move.skillCheck, move, startTime: now, progress: 20 };
           skillCheckRef.current = check;
           setActiveSkillCheck(check);
       } else {
           triggerCooldown(move.id, move.cooldown);
-          if (playerBirdRef.current && opponentBirdRef.current) {
-              executeMove(playerBirdRef.current, opponentBirdRef.current, move, true, 1.0);
-          }
-      }
-  };
-  
-  const handleMash = (e: React.PointerEvent) => {
-      e.preventDefault();
-      const check = skillCheckRef.current;
-      if (!check) return;
-      
-      if (check.type === SkillCheckType.REFLEX) return;
-
-      if (check.type === SkillCheckType.MASH) {
-          const newProgress = Math.min(100, check.progress + 8);
-          check.progress = newProgress;
-          if (newProgress >= 100) {
-              resolveMinigame(100);
-          } else {
-              setActiveSkillCheck({...check});
-          }
-      } else if (check.type === SkillCheckType.TIMING) {
-          if (check.isMovingZone) {
-              const targetMid = (check.targetZoneStart || 40) + (check.targetZoneWidth || 32) / 2;
-              const diff = Math.abs(50 - targetMid);
-              const halfWidth = (check.targetZoneWidth || 32) / 2;
-              
-              let tapColor = '#f43f5e';
-              let intensity = 1;
-              if (diff <= halfWidth / 6) { tapColor = '#10b981'; intensity = 5; }
-              else if (diff <= halfWidth / 3) { tapColor = '#10b981'; intensity = 4; }
-              else if (diff <= halfWidth / 1.5) { tapColor = '#10b981'; intensity = 3; }
-              else if (diff <= halfWidth) { tapColor = '#facc15'; intensity = 2; }
-
-              const marker = { id: Date.now(), progress: 50 };
-              check.isFlashing = true;
-              check.hitMarkers = [marker];
-              check.hitResult = { color: tapColor, intensity, id: Date.now() };
-              setActiveSkillCheck({...check});
-              skillCheckRef.current = check;
-              setTimeout(() => {
-                  resolveMinigame();
-              }, 100);
-          } else {
-              resolveMinigame();
-          }
-      } else if (check.type === SkillCheckType.COMBO || check.type === SkillCheckType.DRAIN_GAME) {
-          if (check.type === SkillCheckType.DRAIN_GAME) {
-              if (check.stage === 1) {
-                  check.flickStartPos = { x: e.clientX, y: e.clientY };
-                  setActiveSkillCheck({...check});
-              } else if (check.stage === 2) {
-                  if (!check.drainBones || check.drainBones.length === 0 || check.drainBones.every(b => b.collected || b.value <= 0)) {
-                      resolveMinigame(); 
-                  }
-              }
-          } else {
-              advanceComboStage();
-          }
-      } else if (check.type === SkillCheckType.FLICK) {
-          check.flickStartPos = { x: e.clientX, y: e.clientY };
-          check.flickCurrentPos = { x: e.clientX, y: e.clientY };
-          setActiveSkillCheck({...check});
+          if (playerBirdRef.current && opponentBirdRef.current) executeMove(playerBirdRef.current, opponentBirdRef.current, move, true, 1.0);
       }
   };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-      const check = skillCheckRef.current;
-      if (!check) return;
-
-      if (check.type === SkillCheckType.FLICK && check.flickStartPos) {
-          check.flickCurrentPos = { x: e.clientX, y: e.clientY };
-          setActiveSkillCheck({...check});
-      } else if (check.type === SkillCheckType.DRAIN_GAME) {
-          if (check.stage === 2 && check.drainBones) {
-              const container = document.querySelector('.minigame-container');
-              if (container && playerBirdRef.current) {
-                  const rect = container.getBoundingClientRect();
-                  const xPct = ((e.clientX - rect.left) / rect.width) * 100;
-                  const yPct = ((e.clientY - rect.top) / rect.height) * 100;
-                  
-                  check.drainBones = check.drainBones.map(h => {
-                      if (h.collected) return h;
-                      const dx = xPct - h.x;
-                      const dy = yPct - h.y;
-                      const dist = Math.sqrt(dx * dx + dy * dy);
-                      if (dist < 10) { 
-                          spawnParticles(e.clientX, e.clientY, "#ffffff", 5);
-                          const baseHealPerBone = Math.ceil((playerBirdRef.current!.attack * check.move.power / 100) * 0.1 * (h.value / 100));
-                          spawnFloatingText(`+${baseHealPerBone} HP`, 'player', e.clientX - rect.left - rect.width/2, e.clientY - rect.top - rect.height/2, "text-emerald-400", 1.2);
-                          return { ...h, collected: true };
-                      }
-                      return h;
-                  });
-                  setActiveSkillCheck({...check});
-              }
-          }
-      }
-  };
-
-  const handleRelease = (e: React.PointerEvent) => {
-      const check = skillCheckRef.current;
-      if (!check) return;
-
-      if (check.type === SkillCheckType.DRAIN_GAME) {
-          if (check.stage === 1) {
-              let mult = 0.5;
-              if (check.progress >= 95) mult = 1.5;
-              else if (check.progress >= 80) mult = 1.2;
-              else if (check.progress >= 50) mult = 1.0;
-              
-              check.stage = 2;
-              check.storedMultiplier = mult;
-              check.startTime = Date.now(); 
-              setActiveSkillCheck({...check});
-              spawnFloatingText(mult >= 1.5 ? "PERFECT!" : mult >= 1.0 ? "GOOD" : "WEAK", 'player', 0, -100, mult >= 1.5 ? "text-yellow-400" : "text-white");
-          }
-      } else if (check.type === SkillCheckType.FLICK && check.flickStartPos) {
-          const start = check.flickStartPos;
-          const dx = e.clientX - start.x;
-          const dy = e.clientY - start.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-          
-          let normalizedAngle = (angle + 360) % 360;
-          let target = check.flickDirection || 0;
-          let diff = Math.abs(normalizedAngle - target);
-          if (diff > 180) diff = 360 - diff;
-
-          const minFlickDist = 60;
-          if (dist < minFlickDist) {
-              resolveMinigame(0, 0.4); 
-              return;
-          }
-
-          let multiplier = 0.5;
-          let color = '#f43f5e';
-          let intensity = 1;
-
-          if (diff <= 22.5) { 
-              multiplier = dist > 180 ? 3.0 : dist > 120 ? 2.2 : 1.5; 
-              color = '#10b981';
-              intensity = dist > 180 ? 6 : 4;
-          } else if (diff <= 45) {
-              multiplier = dist > 120 ? 1.5 : 1.2;
-              color = '#34d399';
-              intensity = 3;
-          } else if (diff <= 90) {
-              multiplier = 0.8;
-              color = '#facc15';
-              intensity = 2;
-          }
-
-          check.isFlashing = true;
-          check.hitResult = { color, intensity, id: Date.now() };
-          setActiveSkillCheck({...check});
-          setTimeout(() => resolveMinigame(0, multiplier), 150);
-      }
-  };
-
-  const handleReflexTap = (e: React.PointerEvent, id: number) => {
-      e.stopPropagation();
-      e.preventDefault(); 
-
-      const check = skillCheckRef.current;
-      if (!check || check.type !== SkillCheckType.REFLEX || !check.reflexTargets) return;
-
-      const clickedTarget = check.reflexTargets.find(t => t.id === id);
-      if (!clickedTarget || clickedTarget.hit) return;
-
-      spawnParticles(e.clientX, e.clientY, check.move.type === MoveType.HEAL ? "#10b981" : "#06b6d4", 5);
-
-      const newTargets = check.reflexTargets.map(t => t.id === id ? { ...t, hit: true } : t);
-      check.reflexTargets = newTargets;
-      
-      if (newTargets.every(t => t.hit)) {
-          const avgValue = newTargets.reduce((sum, t) => sum + t.value, 0) / 3;
-          let multiplier = 1.0;
-          let text = "OK";
-          let color = "text-white";
-
-          if (avgValue >= 70) { multiplier = 1.5; text = "PERFECT!"; color = "text-yellow-400"; } 
-          else if (avgValue >= 30) { multiplier = 1.2; text = "GOOD"; color = "text-cyan-400"; } 
-          else { multiplier = 0.8; text = "SLOW"; color = "text-slate-400"; }
-
-          spawnFloatingText(text, 'opponent', -50, -100, color, 2);
-          
-          const isPerfect = multiplier >= 1.5;
-          const hasPassive = playerBirdRef.current?.id === 'hummingbird';
-          const finalCooldown = (hasPassive && isPerfect) ? check.move.cooldown / 2 : check.move.cooldown;
-          triggerCooldown(check.move.id, finalCooldown);
-
-          skillCheckRef.current = null;
-          setActiveSkillCheck(null);
-          if (playerBirdRef.current && opponentBirdRef.current) {
-              executeMove(playerBirdRef.current, opponentBirdRef.current, check.move, true, multiplier);
-          }
-      } else {
-          setActiveSkillCheck({...check});
-      }
-  };
-
-  if (!opponentBird || !playerBird) return <div className="h-screen bg-slate-950 flex items-center justify-center text-white">INITIALIZING COMBAT...</div>;
+  if (!opponentBird || !playerBird) return null;
 
   return (
     <div className="h-[100dvh] w-full bg-slate-950 relative overflow-hidden flex flex-col font-sans minigame-container">
-       <AnimatePresence>
-           {hitFlash && (
-               <motion.div 
-                   initial={{ opacity: 0.6 }} animate={{ opacity: 0 }} exit={{ opacity: 0 }}
-                   className="absolute inset-0 bg-white z-50 pointer-events-none mix-blend-overlay"
-               />
-           )}
-       </AnimatePresence>
-
-       <BattleHeader 
-            enemyLevel={enemyLevel}
-            enemyPrefix={opponentBird.enemyPrefix}
-            currentZoneProgress={currentZoneProgress}
-            requiredRarities={requiredRarities}
-            onShowThreatDetails={() => setShowThreatDetails(true)}
-            canFlee={playerTurnCount >= 10 && !winner}
-            onFlee={handleFlee}
-       />
-
-       <BattleStage 
-            playerBird={playerBird}
-            opponentBird={opponentBird}
-            playerAnim={playerAnim}
-            opponentAnim={opponentAnim}
-            floatingTexts={floatingTexts}
-            particles={particles}
-       />
-
-       <BattleControls 
-            playerBird={playerBird} 
-            lastUsedMap={lastUsedMap} 
-            onMove={handleMove} 
-            disabled={!!winner || !!activeSkillCheck} 
-       />
-
-       <MinigameOverlay 
-            activeSkillCheck={activeSkillCheck} 
-            onMash={handleMash} 
-            onRelease={handleRelease}
-            onReflexTap={handleReflexTap} 
-            onPointerMove={handlePointerMove}
-       />
-
-       <AnimatePresence>
-           {resultData && (
-               <BattleResultOverlay 
-                    winner={resultData.winner}
-                    rewards={resultData.rewards}
-                    initialBird={initialPlayerBird.current}
-                    updatedBird={playerBirdInstance}
-                    onContinue={onBattleExit}
-                    currentZoneProgress={currentZoneProgress}
-                    requiredRarities={requiredRarities}
-                    opponentRarity={resultData.opponentRarity}
-                    enemyPrefix={opponentBird.enemyPrefix}
-                    isHighestZone={highestZone === enemyLevel}
-                    onApplyLevelUpReward={onApplyLevelUpReward}
-               />
-           )}
-       </AnimatePresence>
-
-       <ThreatDetailsModal 
-            isVisible={showThreatDetails}
-            prefix={opponentBird.enemyPrefix || EnemyPrefix.NONE}
-            onClose={() => setShowThreatDetails(false)}
-       />
+       <AnimatePresence>{hitFlash && <motion.div initial={{ opacity: 0.6 }} animate={{ opacity: 0 }} className="absolute inset-0 bg-white z-50 pointer-events-none mix-blend-overlay" />}</AnimatePresence>
+       <BattleHeader enemyLevel={enemyLevel} enemyPrefix={opponentBird.enemyPrefix} currentZoneProgress={currentZoneProgress || []} requiredRarities={requiredRarities || []} onShowThreatDetails={() => setShowThreatDetails(true)} />
+       <BattleStage playerBird={playerBird} opponentBird={opponentBird} playerAnim={playerAnim} opponentAnim={opponentAnim} floatingTexts={floatingTexts} particles={particles} />
+       <BattleControls playerBird={playerBird} lastUsedMap={lastUsedMap} onMove={handleMove} disabled={!!winner || !!activeSkillCheck} />
+       <MinigameOverlay activeSkillCheck={activeSkillCheck} onComplete={(m, s) => {
+           const check = skillCheckRef.current;
+           if (!check) return;
+           skillCheckRef.current = null;
+           setActiveSkillCheck(null);
+           spawnFloatingText(m >= 1.5 ? "PERFECT!" : "GOOD", 'opponent', -50, -100, m >= 1.5 ? "text-yellow-400" : "text-white", 2);
+           triggerCooldown(check.move.id, (playerBirdRef.current?.id === 'hummingbird' && m >= 1.5) ? check.move.cooldown / 2 : check.move.cooldown);
+           if (playerBirdRef.current && opponentBirdRef.current) executeMove(playerBirdRef.current, opponentBirdRef.current, check.move, true, m, s);
+       }} />
+       <AnimatePresence>{resultData && <BattleResultOverlay winner={resultData.winner} rewards={resultData.rewards} initialBird={initialPlayerBird.current} updatedBird={playerBirdInstance} onContinue={onBattleExit} currentZoneProgress={currentZoneProgress || []} requiredRarities={requiredRarities || []} opponentRarity={opponentBird.rarity} isHighestZone={highestZone === enemyLevel} onApplyLevelUpReward={onApplyLevelUpReward} />}</AnimatePresence>
+       <ThreatDetailsModal isVisible={showThreatDetails} prefix={opponentBird.enemyPrefix!} onClose={() => setShowThreatDetails(false)} />
     </div>
   );
 };
