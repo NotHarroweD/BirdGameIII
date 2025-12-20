@@ -21,11 +21,12 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
     const [cursorPos, setCursorPos] = useState<{ x: number, y: number } | null>(null);
     const [isHolding, setIsHolding] = useState(false);
     const [completionRating, setCompletionRating] = useState<{ text: string, color: string, mult: number } | null>(null);
-    const [tapMarkers, setTapMarkers] = useState<{ id: number, pos: number }[]>([]);
+    const [tapMarkers, setTapMarkers] = useState<{ id: number, pos: number, color: string }[]>([]);
     const [screenFlash, setScreenFlash] = useState(false);
     const [zoneFlash, setZoneFlash] = useState<'success' | 'fail' | null>(null);
     const [mashFlash, setMashFlash] = useState(false);
     const [pointerFlash, setPointerFlash] = useState(false);
+    const [resultColor, setResultColor] = useState('bg-white');
 
     const ratio = bones.length > 0 ? bones.filter(h => h.collected).length / bones.length : 0;
 
@@ -46,6 +47,11 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
 
     const frameRef = useRef<number>(0);
 
+    const getMashColor = (p: number) => {
+        const hue = (p * 1.2); 
+        return `hsl(${hue}, 85%, 45%)`;
+    };
+
     useEffect(() => {
         if (!activeSkillCheck) {
             stateRef.current.isDone = false;
@@ -58,13 +64,13 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
             setZoneFlash(null);
             setMashFlash(false);
             setPointerFlash(false);
+            setResultColor('bg-white');
             return;
         }
 
         const isSonic = activeSkillCheck.move.id === 'sonic_wave';
-        const isMash = activeSkillCheck.type === SkillCheckType.MASH;
-        const startWidth = activeSkillCheck.type === SkillCheckType.COMBO ? 38 : (isSonic ? 32 : 18);
-        const startZone = activeSkillCheck.type === SkillCheckType.COMBO ? Math.random() * 62 : 40;
+        const startWidth = activeSkillCheck.type === SkillCheckType.COMBO ? 36 : (isSonic ? 32 : 18);
+        const startZone = activeSkillCheck.type === SkillCheckType.COMBO ? Math.random() * 60 : 40;
 
         stateRef.current = {
             progress: 0,
@@ -89,23 +95,6 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         setCompletionRating(null);
         setTapMarkers([]);
 
-        if (isMash) {
-            setTimeout(() => {
-                if (stateRef.current.isDone) return;
-                stateRef.current.progress = 10;
-                setProgress(10);
-                setMashFlash(true);
-                setTimeout(() => setMashFlash(false), 50);
-            }, 50);
-            setTimeout(() => {
-                if (stateRef.current.isDone) return;
-                stateRef.current.progress = 20;
-                setProgress(20);
-                setMashFlash(true);
-                setTimeout(() => setMashFlash(false), 50);
-            }, 150);
-        }
-
         if (activeSkillCheck.type === SkillCheckType.REFLEX) {
             setReflexTargets([
                 { id: 1, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60, value: 100, hit: false },
@@ -115,13 +104,14 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         }
 
         if (activeSkillCheck.type === SkillCheckType.DRAIN_GAME) {
-            const initialBones: BoneData[] = Array.from({ length: 18 }).map((_, i) => {
-                const angle = Math.random() * Math.PI * 2;
-                const speed = 5 + Math.random() * 5;
+            const boneCount = 12;
+            const initialBones: BoneData[] = Array.from({ length: boneCount }).map((_, i) => {
+                const angle = (i / boneCount) * Math.PI * 2;
+                const speed = 5 + Math.random() * 2;
                 return {
                     id: Date.now() + i,
-                    x: 50,
-                    y: 50,
+                    x: 50 + Math.cos(angle) * 2,
+                    y: 50 + Math.sin(angle) * 2,
                     vx: Math.cos(angle) * speed,
                     vy: Math.sin(angle) * speed,
                     collected: false
@@ -131,28 +121,40 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         }
 
         const update = () => {
-            if (stateRef.current.isDone || stateRef.current.isPaused) return;
+            if (stateRef.current.isDone || stateRef.current.isPaused) {
+                frameRef.current = requestAnimationFrame(update);
+                return;
+            }
             const now = Date.now();
 
             if (activeSkillCheck.type === SkillCheckType.TIMING || activeSkillCheck.type === SkillCheckType.COMBO) {
-                const speed = activeSkillCheck.type === SkillCheckType.COMBO ? (3.5 + stateRef.current.stage * 1.5) : 5.0;
-                if (isSonic) {
-                    let p = stateRef.current.targetZone.start + (speed) * stateRef.current.direction;
-                    if (p >= (100 - stateRef.current.targetZone.width) || p <= 0) stateRef.current.direction *= -1;
-                    stateRef.current.targetZone.start = Math.max(0, Math.min(100 - stateRef.current.targetZone.width, p));
+                const speed = activeSkillCheck.type === SkillCheckType.COMBO ? (2.8 + stateRef.current.stage * 1.0) : 3.5;
+                
+                let nextP = stateRef.current.progress + (speed * stateRef.current.direction);
+                if (nextP >= 100) {
+                    nextP = 100;
+                    stateRef.current.direction = -1;
+                } else if (nextP <= 0) {
+                    nextP = 0;
+                    stateRef.current.direction = 1;
+                }
+                
+                stateRef.current.progress = nextP;
+                setProgress(nextP);
+
+                if (activeSkillCheck.move.id === 'sonic_wave') {
+                    let zp = stateRef.current.targetZone.start + (speed * 0.8 * stateRef.current.direction);
+                    if (zp >= (100 - stateRef.current.targetZone.width)) zp = 100 - stateRef.current.targetZone.width;
+                    if (zp <= 0) zp = 0;
+                    stateRef.current.targetZone.start = zp;
                     setTargetZone({ ...stateRef.current.targetZone });
-                } else {
-                    let p = stateRef.current.progress + (speed) * stateRef.current.direction;
-                    if (p >= 100 || p <= 0) stateRef.current.direction *= -1;
-                    stateRef.current.progress = p;
-                    setProgress(p);
                 }
             } else if (activeSkillCheck.type === SkillCheckType.MASH) {
-                stateRef.current.progress = Math.max(0, stateRef.current.progress - 0.06);
+                stateRef.current.progress = Math.max(0, stateRef.current.progress - 0.05);
                 setProgress(stateRef.current.progress);
                 if (now - stateRef.current.startTime > 3000) resolve(stateRef.current.progress / 100);
             } else if (activeSkillCheck.type === SkillCheckType.REFLEX) {
-                setReflexTargets(prev => prev.map(t => t.hit ? t : { ...t, value: Math.max(0, t.value - 0.4) }));
+                setReflexTargets(prev => prev.map(t => t.hit ? t : { ...t, value: Math.max(0, t.value - 0.45) }));
             } else if (activeSkillCheck.type === SkillCheckType.DRAIN_GAME) {
                 setBones(prev => {
                     const isVacuuming = stateRef.current.isHolding;
@@ -166,45 +168,28 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                             const dx = cx - nx;
                             const dy = cy - ny;
                             const distSq = dx * dx + dy * dy;
-                            const vacuumRadiusSq = 450; 
-                            const collectionRadiusSq = 60; 
-                            if (distSq < vacuumRadiusSq) {
-                                const force = 0.6;
+                            if (distSq < 600) {
+                                const force = 0.85;
                                 h.vx += (dx / Math.sqrt(distSq)) * force;
                                 h.vy += (dy / Math.sqrt(distSq)) * force;
-                                h.vx *= 0.90;
-                                h.vy *= 0.90;
+                                h.vx *= 0.85;
+                                h.vy *= 0.85;
                             }
-                            if (distSq < collectionRadiusSq) {
-                                h.collected = true;
-                                const count = prev.filter(x => x.collected).length + 1;
-                                const ratioLocal = count / prev.length;
-                                const color = ratioLocal >= 0.8 ? '#10b981' : ratioLocal >= 0.4 ? '#facc15' : '#ffffff';
-                                const container = document.querySelector('.minigame-container');
-                                if (container) {
-                                    const rect = container.getBoundingClientRect();
-                                    const screenX = rect.left + (cx / 100) * rect.width;
-                                    const screenY = rect.top + (cy / 100) * rect.height;
-                                    spawnParticles(screenX, screenY, color);
-                                }
-                            }
+                            if (distSq < 100) h.collected = true;
                         }
                         if (nx <= 5 || nx >= 95) { h.vx *= -0.85; nx = nx <= 5 ? 5.1 : 94.9; }
                         if (ny <= 10 || ny >= 90) { h.vy *= -0.85; ny = ny <= 10 ? 10.1 : 89.9; }
-                        const speed = Math.sqrt(h.vx * h.vx + h.vy * h.vy);
-                        if (speed > 5) {
-                            h.vx = (h.vx / speed) * 5;
-                            h.vy = (h.vy / speed) * 5;
-                        }
                         return { ...h, x: nx, y: ny };
                     });
-                    if (updated.every(b => b.collected)) {
+                    
+                    if (updated.every(b => b.collected) && !stateRef.current.isPaused) {
+                        stateRef.current.isPaused = true;
                         const elapsed = (Date.now() - stateRef.current.startTime) / 1000;
                         let rating = { text: "Weak Snack", color: "text-slate-400", mult: 1.2 };
-                        if (elapsed < 3.0) rating = { text: "Perfect Feast", color: "text-yellow-400", mult: 3.0 };
-                        else if (elapsed < 6.0) rating = { text: "Good Meal", color: "text-emerald-400", mult: 2.0 };
+                        if (elapsed < 1.3) rating = { text: "Perfect Feast", color: "text-yellow-400", mult: 3.0 };
+                        else if (elapsed < 2.2) rating = { text: "Good Meal", color: "text-emerald-400", mult: 2.0 };
                         setCompletionRating(rating);
-                        setTimeout(() => resolve(rating.mult, 1.0), 600);
+                        setTimeout(() => resolve(rating.mult, 1.0), 800);
                     }
                     return updated;
                 });
@@ -224,31 +209,30 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
     const handleInteraction = (e: React.PointerEvent) => {
         if (!activeSkillCheck || stateRef.current.isDone || stateRef.current.isPaused) return;
         e.preventDefault();
+        
         if (activeSkillCheck.type === SkillCheckType.MASH) {
             setMashFlash(true);
             setTimeout(() => setMashFlash(false), 50);
-            
-            stateRef.current.progress = Math.min(100, stateRef.current.progress + 6.5);
+            stateRef.current.progress = Math.min(100, stateRef.current.progress + 7.5);
             setProgress(stateRef.current.progress);
             if (stateRef.current.progress >= 100) {
-                setScreenFlash(true);
-                const rect = e.currentTarget.getBoundingClientRect();
-                for (let i = 0; i < 20; i++) {
-                    spawnParticles(rect.left + rect.width / 2, rect.top + rect.height / 2, '#facc15');
-                }
-                setTimeout(() => resolve(1.5), 50);
+                setTimeout(() => resolve(1.5), 250);
             }
         } else if (activeSkillCheck.type === SkillCheckType.TIMING || activeSkillCheck.type === SkillCheckType.COMBO) {
-            stateRef.current.isPaused = true; // Stop pointer immediately
+            stateRef.current.isPaused = true;
             const markerPos = activeSkillCheck.move.id === 'sonic_wave' ? 50 : stateRef.current.progress;
-            const markerId = Date.now();
-            setTapMarkers(prev => [...prev, { id: markerId, pos: markerPos }]);
             
+            setProgress(markerPos);
+
             const targetMid = stateRef.current.targetZone.start + stateRef.current.targetZone.width / 2;
             const diff = Math.abs(markerPos - targetMid);
             const halfWidth = stateRef.current.targetZone.width / 2;
             const isHit = diff <= halfWidth;
 
+            const markerColor = isHit ? 'bg-emerald-400' : 'bg-rose-500';
+            setResultColor(markerColor);
+            setTapMarkers(prev => [...prev, { id: Date.now(), pos: markerPos, color: markerColor }]);
+            
             setScreenFlash(true);
             setTimeout(() => setScreenFlash(false), 100);
             setZoneFlash(isHit ? 'success' : 'fail');
@@ -259,7 +243,7 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                 if (diff <= halfWidth / 6) m = 2.0;
                 else if (diff <= halfWidth / 2) m = 1.5;
                 else if (diff <= halfWidth) m = 1.2;
-                setTimeout(() => resolve(m), 300);
+                setTimeout(() => resolve(m), 250);
             } else {
                 if (isHit) {
                     stateRef.current.accMult += (diff <= halfWidth / 4 ? 0.8 : 0.4);
@@ -274,13 +258,17 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                         stateRef.current.isPaused = false;
                         stateRef.current.stage += 1;
                         setStage(stateRef.current.stage);
-                        stateRef.current.targetZone = { start: Math.random() * 70, width: stateRef.current.targetZone.width * 0.8 };
+                        stateRef.current.targetZone = { 
+                            start: Math.random() * (100 - stateRef.current.targetZone.width * 0.8), 
+                            width: stateRef.current.targetZone.width * 0.85 
+                        };
                         setTargetZone(stateRef.current.targetZone);
                         setZoneFlash(null);
                         setPointerFlash(false);
-                    }, 300);
+                        setResultColor('bg-white');
+                    }, 200);
                 } else {
-                    setTimeout(() => resolve(Math.max(0.5, stateRef.current.accMult)), 300);
+                    setTimeout(() => resolve(Math.max(0.5, stateRef.current.accMult)), 250);
                 }
             }
         } else if (activeSkillCheck.type === SkillCheckType.DRAIN_GAME) {
@@ -312,29 +300,46 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         }
     };
 
-    const spawnParticles = (x: number, y: number, color: string) => {
-        const id = Date.now() + Math.random();
-        setOverlayParticles(prev => [...prev, { id, x, y, color }]);
-        setTimeout(() => setOverlayParticles(prev => prev.filter(p => p.id !== id)), 600);
-    };
-
-    const getMashColor = (p: number) => {
-        const hue = (p * 1.8);
-        return `hsl(${hue}, 80%, 50%)`;
-    };
+    const BonePointer = ({ pos, color, isActive = false }: { pos: number, color: string, isActive?: boolean }) => (
+        <motion.div 
+            className="absolute h-full w-4 z-40 pointer-events-none"
+            style={{ left: `${pos}%`, transform: 'translateX(-50%)' }}
+            animate={isActive && pointerFlash ? { scale: [1, 1.2, 1] } : {}}
+            transition={{ duration: 0.2 }}
+        >
+            <div className={`h-full w-full bg-white shadow-[0_0_15px_rgba(255,255,255,0.6)] border-x border-slate-950/20`} />
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-[45%] flex gap-[-2px] items-center justify-center">
+                <div className={`w-5 h-5 rounded-full bg-white border border-slate-950 shadow-md`} />
+                <div className={`w-5 h-5 rounded-full bg-white border border-slate-950 -ml-1 shadow-md`} />
+            </div>
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[45%] flex gap-[-2px] items-center justify-center">
+                <div className={`w-5 h-5 rounded-full bg-white border border-slate-950 shadow-md`} />
+                <div className={`w-5 h-5 rounded-full bg-white border border-slate-950 -ml-1 shadow-md`} />
+            </div>
+        </motion.div>
+    );
 
     return (
         <AnimatePresence>
         {activeSkillCheck && (
             <motion.div 
                 initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-                className="absolute inset-0 z-50 bg-black/50 backdrop-blur-md flex flex-col items-center justify-center gap-8 select-none touch-none"
+                className="absolute inset-0 z-50 bg-black/60 backdrop-blur-lg flex flex-col items-center justify-center gap-8 select-none touch-none"
                 onPointerDown={handleInteraction}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerLeave={handlePointerUp}
             >
-                <AnimatePresence>{screenFlash && <motion.div initial={{opacity:0.4}} animate={{opacity:0}} className="absolute inset-0 bg-white z-[60] pointer-events-none" />}</AnimatePresence>
+                <AnimatePresence>
+                    {screenFlash && activeSkillCheck.type !== SkillCheckType.MASH && (
+                        <motion.div 
+                            initial={{opacity: 0.8}} 
+                            animate={{opacity: 0}} 
+                            className="absolute inset-0 z-[60] pointer-events-none bg-white" 
+                        />
+                    )}
+                </AnimatePresence>
+                
                 {activeSkillCheck.type === SkillCheckType.REFLEX ? (
                     <div className="absolute inset-0 w-full h-full relative">
                         <div className="absolute top-16 w-full text-center text-white font-tech text-3xl animate-pulse tracking-widest pointer-events-none">TAP TARGETS!</div>
@@ -352,7 +357,7 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                         <AnimatePresence>
                             {!completionRating && (
                                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute top-12 w-full text-center z-10 px-6">
-                                    <h2 className="text-white font-tech text-4xl font-black italic animate-pulse drop-shadow-[0_0_15px_rgba(168,85,247,0.5)]">CARRION FEAST</h2>
+                                    <h2 className="text-white font-tech text-4xl font-black italic animate-pulse drop-shadow-[0_0_15px_rgba(168,85,247,0.5)] uppercase">CARRION FEAST</h2>
                                     <p className="text-purple-400 font-bold uppercase tracking-widest text-sm mt-2">Hold and vacuum souls into the core</p>
                                 </motion.div>
                             )}
@@ -360,7 +365,6 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                         {cursorPos && !completionRating && (
                             <motion.div animate={{ scale: isHolding ? [1, 1.15, 1] : 0.2, opacity: isHolding ? 0.9 : 0 }} transition={{ scale: { repeat: Infinity, duration: 0.8, ease: "easeInOut" } }} className="absolute w-32 h-32 rounded-full bg-purple-600 pointer-events-none z-30 shadow-[0_0_40px_rgba(147,51,234,0.6)] flex items-center justify-center" style={{ left: `${cursorPos.x}%`, top: `${cursorPos.y}%`, transform: 'translate(-50%, -50%)' }}>
                                 <div className="absolute inset-0 rounded-full border-4 border-white/20" />
-                                <div className="absolute inset-2 rounded-full border border-purple-300/30 animate-pulse" />
                                 <div className="w-4 h-4 rounded-full bg-white/40 blur-sm" />
                             </motion.div>
                         )}
@@ -368,7 +372,7 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                             {bones.map(h => (
                                 <motion.div key={h.id} className="absolute" animate={{ scale: h.collected ? [1.2, 4, 0] : [1, 1.2, 1], opacity: h.collected ? [1, 1, 0] : 0.9, rotate: h.collected ? 180 : 0 }} transition={{ duration: h.collected ? 0.3 : 2, repeat: h.collected ? 0 : Infinity, ease: "easeInOut" }} style={{ left: `${h.x}%`, top: `${h.y}%`, transform: 'translate(-50%, -50%)', zIndex: h.collected ? 40 : 20 }}>
                                     <div className="relative w-16 h-16 flex items-center justify-center">
-                                        <Bone size={h.collected ? 48 : 32} className={h.collected ? "text-emerald-400" : "text-white"} style={{ filter: h.collected ? 'none' : `drop-shadow(0 0 8px rgba(168,85,247,0.5))` }} />
+                                        <Bone size={h.collected ? 64 : 44} className={h.collected ? "text-emerald-400" : "text-white"} style={{ filter: h.collected ? 'none' : `drop-shadow(0 0 10px rgba(168,85,247,0.7))` }} />
                                     </div>
                                 </motion.div>
                             ))}
@@ -384,18 +388,6 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                                 </motion.div>
                             )}
                         </AnimatePresence>
-                        {!completionRating && (
-                            <div className="absolute bottom-12 w-full flex justify-center z-40">
-                                <div className="inline-block bg-slate-900/90 border-2 border-purple-500/50 px-8 py-4 rounded-full backdrop-blur-md shadow-2xl">
-                                    <div className="text-3xl font-tech font-black text-white flex items-center gap-4">
-                                        <Bone size={28} className="text-slate-400" />
-                                        <span style={{ color: ratio >= 0.8 ? '#10b981' : ratio >= 0.4 ? '#facc15' : '#cbd5e1' }} className="drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">{bones.filter(h => h.collected).length}</span>
-                                        <span className="text-slate-600">/</span>
-                                        <span>{bones.length}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 ) : activeSkillCheck.type === SkillCheckType.FLICK ? (
                     <div className="flex flex-col items-center gap-12 w-full max-w-lg relative">
@@ -403,35 +395,85 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                         <div className="relative w-64 h-64 flex items-center justify-center rounded-full border-4 border-slate-800 bg-slate-900 shadow-2xl">
                              {activeSkillCheck.move.id === 'sonic_wave' ? <MoveUp size={80} className="text-cyan-400" /> : <Zap size={80} className="text-cyan-400" />}
                         </div>
-                        <div className="text-slate-400 text-xs font-mono uppercase">Drag across screen to trigger</div>
                     </div>
                 ) : (
                     <div className="flex flex-col items-center w-full relative">
-                        <div className="text-white font-tech text-4xl font-black animate-pulse uppercase tracking-widest mb-8">{activeSkillCheck.type === SkillCheckType.TIMING ? "TAP AT GREEN!" : activeSkillCheck.type === SkillCheckType.COMBO ? `COMBO HIT ${stage}/3` : "TAP FAST!"}</div>
-                        <div className="h-16 mb-4 flex items-center justify-center">
-                            <AnimatePresence>{hitFeedback && (<motion.div key={hitFeedback.id} initial={{opacity:0,scale:0.5}} animate={{opacity:1,scale:1.2}} exit={{opacity:0,scale:2}} className={`font-tech font-black text-3xl italic ${hitFeedback.color}`}>{hitFeedback.text}</motion.div>)}</AnimatePresence>
+                        <div className="text-white font-tech text-4xl font-black animate-pulse uppercase tracking-widest mb-8">
+                            {activeSkillCheck.type === SkillCheckType.TIMING ? "HIT THE ZONE!" : activeSkillCheck.type === SkillCheckType.COMBO ? `COMBO HIT ${stage}/3` : "TAP FAST!"}
                         </div>
-                        <div className="w-[85%] border-4 border-slate-700 rounded-xl relative overflow-hidden bg-slate-950 h-24 shadow-2xl">
+                        <div className="h-16 mb-4 flex items-center justify-center">
+                            <AnimatePresence>
+                                {hitFeedback && (
+                                    <motion.div 
+                                        key={hitFeedback.id} 
+                                        initial={hitFeedback.isStable ? { opacity: 0, scale: 0.5 } : { opacity: 0, scale: 0.5, y: 0 }} 
+                                        animate={hitFeedback.isStable ? { opacity: 1, scale: 1.8 } : { opacity: 1, scale: 1.2, y: -20 }} 
+                                        exit={hitFeedback.isStable ? { opacity: 0, scale: 3 } : { opacity: 0, scale: 2 }} 
+                                        className={`font-tech font-black text-3xl italic ${hitFeedback.color} ${hitFeedback.isStable ? 'drop-shadow-[0_0_20px_rgba(16,185,129,0.6)]' : ''}`}
+                                    >
+                                        {hitFeedback.text}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                        <motion.div 
+                            className={`w-[85%] border-4 transition-all duration-150 rounded-2xl relative overflow-visible bg-slate-950 h-28 shadow-2xl ${zoneFlash === 'success' ? 'border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.4)]' : zoneFlash === 'fail' ? 'border-rose-500 shadow-[0_0_30px_rgba(244,63,94,0.4)]' : 'border-slate-700'}`}
+                            animate={activeSkillCheck.type === SkillCheckType.MASH && progress >= 100 ? { scale: [1, 1.05, 1], shadow: "0 0 50px rgba(34,211,238,0.5)" } : {}}
+                            transition={activeSkillCheck.type === SkillCheckType.MASH && progress >= 100 ? { repeat: Infinity, duration: 0.15 } : {}}
+                        >
                             {activeSkillCheck.type === SkillCheckType.MASH ? (
                                 <div className="h-full relative overflow-hidden">
-                                    <div className={`h-full transition-all duration-75 ease-out ${mashFlash ? 'brightness-150 scale-y-110' : ''}`} style={{width: `${progress}%`, backgroundColor: getMashColor(progress)}} />
-                                    <div className="absolute right-0 top-0 bottom-0 w-1 bg-yellow-400 animate-pulse shadow-[0_0_15px_#facc15]" />
-                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 text-white font-tech font-black text-xs tracking-tighter opacity-70">MAX POWER</div>
+                                    <motion.div 
+                                        className={`h-full transition-all duration-75 ease-out shadow-[inset_-10px_0_30px_rgba(255,255,255,0.2)]`} 
+                                        style={{width: `${progress}%`, backgroundColor: getMashColor(progress)}} 
+                                        animate={progress >= 100 ? { filter: ["brightness(1)", "brightness(2)", "brightness(1)"], x: [0, -4, 4, -4, 4, 0] } : {}}
+                                        transition={progress >= 100 ? { repeat: Infinity, duration: 0.1 } : {}}
+                                    />
+                                    <div className="absolute right-0 top-0 bottom-0 w-2 bg-emerald-400 animate-pulse shadow-[0_0_20px_#10b981]" />
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-white font-tech font-black text-sm tracking-widest opacity-50">MAX</div>
+                                    
+                                    {/* Burst Effect */}
+                                    <AnimatePresence>
+                                        {progress >= 100 && (
+                                            <motion.div 
+                                                initial={{ scale: 0, opacity: 1 }}
+                                                animate={{ scale: 2, opacity: 0 }}
+                                                transition={{ duration: 0.5, repeat: Infinity }}
+                                                className="absolute inset-0 bg-white/20 z-[30] pointer-events-none"
+                                            />
+                                        )}
+                                    </AnimatePresence>
                                 </div>
                             ) : (
                                 <>
-                                    <div className={`absolute h-full transition-all duration-100 ${zoneFlash === 'success' ? 'bg-emerald-400 opacity-100 shadow-[0_0_25px_#10b981]' : zoneFlash === 'fail' ? 'bg-rose-500 opacity-100 shadow-[0_0_25px_#f43f5e]' : 'bg-emerald-500/40'} outline outline-4 ${zoneFlash === 'success' ? 'outline-emerald-300' : zoneFlash === 'fail' ? 'outline-rose-300' : 'outline-emerald-400'} outline-offset-[-2px]`} style={{ left: `${targetZone.start}%`, width: `${targetZone.width}%` }} />
+                                    <div 
+                                        className={`absolute h-full transition-all duration-150 ${zoneFlash === 'success' ? 'bg-emerald-400 opacity-100 shadow-[0_0_50px_#10b981]' : zoneFlash === 'fail' ? 'bg-rose-500 opacity-100 shadow-[0_0_50px_#f43f5e]' : 'bg-emerald-500/40'} border-x-4 ${zoneFlash === 'success' ? 'border-emerald-200' : zoneFlash === 'fail' ? 'border-rose-200' : 'border-emerald-400/60'}`} 
+                                        style={{ left: `${targetZone.start}%`, width: `${targetZone.width}%` }} 
+                                    />
+                                    
                                     {tapMarkers.map(m => (
-                                        <motion.div key={m.id} initial={{opacity:1, scaleY: 1.2}} animate={{opacity:0, scaleY: 1}} transition={{duration:0.8}} className="absolute h-full w-1 bg-white shadow-[0_0_15px_white]" style={{left:`${m.pos}%` , transform: 'translateX(-50%)'}} />
+                                        <motion.div 
+                                            key={m.id} 
+                                            initial={{ opacity: 1, scale: 1 }} 
+                                            animate={{ opacity: 0, scale: 1.1 }} 
+                                            transition={{ duration: 0.4, ease: "easeOut" }}
+                                            className="absolute inset-0 pointer-events-none"
+                                        >
+                                            <BonePointer pos={m.pos} color={m.color} />
+                                        </motion.div>
                                     ))}
-                                    <div className={`absolute h-full w-1.5 transition-all duration-75 ${pointerFlash ? 'bg-yellow-300 scale-x-150 shadow-[0_0_20px_yellow]' : 'bg-white shadow-[0_0_15px_white]'}`} style={{ left: `${progress}%`, transform: 'translateX(-50%)', opacity: activeSkillCheck.move.id === 'sonic_wave' ? 0 : 1 }} />
-                                    {activeSkillCheck.move.id === 'sonic_wave' && <div className="absolute h-full w-1.5 bg-cyan-400 shadow-[0_0_10px_cyan]" style={{ left: '50%', transform: 'translateX(-50%)' }} />}
+                                    
+                                    {activeSkillCheck.move.id !== 'sonic_wave' && (
+                                        <BonePointer pos={progress} color={pointerFlash ? resultColor : 'bg-white'} isActive={true} />
+                                    )}
+                                    
+                                    {activeSkillCheck.move.id === 'sonic_wave' && <div className="absolute h-full w-3 bg-cyan-400 shadow-[0_0_20px_cyan]" style={{ left: '50%', transform: 'translateX(-50%)' }} />}
                                 </>
                             )}
-                        </div>
+                        </motion.div>
+                        <div className="mt-8 text-slate-500 font-tech text-xs tracking-[0.3em] animate-pulse">TAP ANYWHERE TO HIT</div>
                     </div>
                 )}
-                {overlayParticles.map(p => (<motion.div key={p.id} initial={{scale:1,opacity:1}} animate={{scale:0,opacity:0}} className="fixed w-4 h-4 rounded-full pointer-events-none" style={{left:p.x,top:p.y,backgroundColor:p.color,boxShadow:`0 0 10px ${p.color}`}} />))}
             </motion.div>
         )}
        </AnimatePresence>
