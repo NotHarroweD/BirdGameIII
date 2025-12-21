@@ -1,156 +1,144 @@
-import { BirdTemplate, BirdInstance, MoveType, SkillCheckType, Rarity, Bird } from '../types';
-import { RARITY_CONFIG } from './items';
+
+import { BirdTemplate, MoveType, SkillCheckType, Rarity, BirdInstance } from '../types';
 
 export const BIRD_TEMPLATES: BirdTemplate[] = [
   {
-    id: 'hummingbird',
-    name: 'Hummingbird',
-    species: 'Speed Class',
-    description: 'Extremely fast and evasive. Hard to hit but fragile.',
-    imageUrl: 'https://images.unsplash.com/photo-1544636254-d83b6329c3d9?q=80&w=800&auto=format&fit=crop',
-    baseHp: 90,
-    baseEnergy: 110,
-    baseAttack: 45,
-    baseDefense: 35,
-    baseSpeed: 95,
-    baseStats: {
-      hp: [90, 110], 
-      energy: [110, 130],
-      attack: [45, 55],
-      defense: [35, 45], 
-      speed: [95, 110]
-    },
-    passive: {
-      name: 'Chrono-Flutter',
-      description: 'Perfect minigame results (x1.5+) reduce move cooldowns by 50%.'
-    },
-    moves: [
-      { id: 'rapid_peck', name: 'Rapid Peck', description: 'Quick 3-hit combo combo.', type: MoveType.ATTACK, power: 60, cost: 10, accuracy: 95, cooldown: 4000, skillCheck: SkillCheckType.COMBO },
-      { id: 'evasive_maneuvers', name: 'Evasive Maneuvers', description: 'Increases evasion.', type: MoveType.DEFENSE, power: 0, cost: 25, accuracy: 100, effect: 'dodge', cooldown: 12000, skillCheck: SkillCheckType.REFLEX },
-      { id: 'nectar_sip', name: 'Nectar Sip', description: 'Restore HP.', type: MoveType.HEAL, power: 12, cost: 25, accuracy: 100, cooldown: 18000, skillCheck: SkillCheckType.REFLEX }, 
-      { id: 'sonic_wave', name: 'Sonic Wave', description: 'High speed dash creating a destructive pressure wave.', type: MoveType.SPECIAL, power: 52, cost: 45, accuracy: 90, requiresHeight: true, cooldown: 12000, skillCheck: SkillCheckType.FLICK }
-    ],
-    huntingConfig: {
-      baseRate: 2,
-      description: 'Speedy gatherer. 10% Chance for Double Feathers.'
-    }
-  },
-  {
     id: 'eagle',
     name: 'Eagle',
-    species: 'Power Class',
-    description: 'Heavy hitter with high HP and Attack. Slow speed.',
-    imageUrl: 'https://images.unsplash.com/photo-1579702958013-1d0794b638b9?q=80&w=800&auto=format&fit=crop',
-    baseHp: 150,
-    baseEnergy: 80,
-    baseAttack: 80,
-    baseDefense: 55,
-    baseSpeed: 35,
+    species: 'Apex Predator',
+    description: 'Balanced fighter with strong attacks.',
+    imageUrl: 'https://placehold.co/400x400/1e293b/475569?text=Eagle',
+    baseHp: 100,
+    baseEnergy: 100,
+    baseAttack: 10,
+    baseDefense: 5,
+    baseSpeed: 6,
     baseStats: {
-      hp: [150, 170],
-      energy: [80, 100],
-      attack: [80, 95],
-      defense: [55, 65],
-      speed: [35, 45]
+        hp: [90, 110],
+        energy: [90, 110],
+        attack: [8, 12],
+        defense: [4, 6],
+        speed: [5, 7]
     },
     passive: {
-      name: 'Apex Predator',
-      description: 'Deals 25% bonus damage to low HP targets.'
+      name: 'Predator',
+      description: 'Deals 25% more damage to enemies below 50% HP.'
     },
     moves: [
-      { id: 'crushing_talon', name: 'Crushing Talon', description: 'Devastating strike.', type: MoveType.ATTACK, power: 45, cost: 20, accuracy: 85, cooldown: 8000, skillCheck: SkillCheckType.TIMING },
-      { id: 'iron_plumage', name: 'Iron Plumage', description: 'Reduce damage.', type: MoveType.DEFENSE, power: 0, cost: 20, accuracy: 100, cooldown: 15000, skillCheck: SkillCheckType.REFLEX },
-      { id: 'scavenge', name: 'Scavenge', description: 'Heal from surroundings.', type: MoveType.HEAL, power: 30, cost: 35, accuracy: 100, cooldown: 25000, skillCheck: SkillCheckType.REFLEX },
-      { id: 'sky_drop', name: 'Sky Drop', description: 'Lift and drop enemy.', type: MoveType.SPECIAL, power: 75, cost: 55, accuracy: 80, requiresHeight: true, cooldown: 30000, skillCheck: SkillCheckType.MASH }
+      { id: 'peck', name: 'Peck', description: 'Basic attack.', type: MoveType.ATTACK, power: 15, cost: 5, accuracy: 100, cooldown: 1000, skillCheck: SkillCheckType.TIMING },
+      { id: 'screech', name: 'Screech', description: 'Stun chance.', type: MoveType.SPECIAL, power: 10, cost: 20, accuracy: 80, cooldown: 5000, skillCheck: SkillCheckType.MASH },
+      { id: 'dive', name: 'Dive Bomb', description: 'High damage from above.', type: MoveType.ATTACK, power: 40, cost: 25, accuracy: 90, requiresHeight: true, cooldown: 4000, skillCheck: SkillCheckType.TIMING },
+      { id: 'roost', name: 'Roost', description: 'Recover energy.', type: MoveType.DEFENSE, power: 0, cost: 0, accuracy: 100, cooldown: 3000, effect: 'shield' }
     ],
-    huntingConfig: {
-      baseRate: 1,
-      description: 'Reliable hunting. High base yield.'
-    }
+    huntingConfig: { baseRate: 1.0, description: 'Standard hunting rate.' }
   },
   {
     id: 'hawk',
     name: 'Hawk',
-    species: 'Tactical Class',
-    description: 'Cybernetically enhanced with guaranteed hit abilities.',
-    imageUrl: 'https://cdn.discordapp.com/attachments/1037799584228974675/1448169051972178010/SSF96554KG9JE4KEW6E5FAC5X0.png?ex=693a4807&is=6938f687&hm=47a6c8449cf1b247287048c7e07fb8fbb84226a4f0bf3da875f62a22bf021ceb&',
-    baseHp: 110,
-    baseEnergy: 95,
-    baseAttack: 60,
-    baseDefense: 40,
-    baseSpeed: 65,
+    species: 'Sky Hunter',
+    description: 'High critical chance and bleed effects.',
+    imageUrl: 'https://placehold.co/400x400/1e293b/475569?text=Hawk',
+    baseHp: 80,
+    baseEnergy: 90,
+    baseAttack: 12,
+    baseDefense: 4,
+    baseSpeed: 8,
     baseStats: {
-      hp: [110, 130],
-      energy: [95, 115],
-      attack: [60, 75],
-      defense: [40, 50],
-      speed: [65, 75]
+        hp: [75, 90],
+        energy: [80, 100],
+        attack: [10, 14],
+        defense: [3, 5],
+        speed: [7, 9]
     },
     passive: {
       name: 'Keen Eye',
-      description: 'Attacks cannot be dodged.'
+      description: 'Ignores enemy evasion buffs.'
     },
     moves: [
-      { id: 'precision_dive', name: 'Precision Dive', description: 'Guaranteed hit.', type: MoveType.ATTACK, power: 25, cost: 15, accuracy: 100, requiresHeight: true, cooldown: 6000, skillCheck: SkillCheckType.TIMING },
-      { id: 'wind_ride', name: 'Wind Ride', description: 'Ride the wind.', type: MoveType.DEFENSE, power: 0, cost: 10, accuracy: 100, effect: 'dodge', cooldown: 10000, skillCheck: SkillCheckType.REFLEX },
-      { id: 'roost', name: 'Roost', description: 'Rest to heal.', type: MoveType.HEAL, power: 25, cost: 25, accuracy: 100, cooldown: 20000, skillCheck: SkillCheckType.REFLEX },
-      { id: 'razor_wind', name: 'Razor Wind', description: 'Wind cutter.', type: MoveType.SPECIAL, power: 50, cost: 40, accuracy: 95, cooldown: 18000, skillCheck: SkillCheckType.MASH }
+      { id: 'slash', name: 'Talon Slash', description: 'Bleed chance.', type: MoveType.ATTACK, power: 20, cost: 10, accuracy: 95, cooldown: 1500, skillCheck: SkillCheckType.FLICK },
+      { id: 'focus', name: 'Focus', description: 'Next attack crits.', type: MoveType.SPECIAL, power: 0, cost: 15, accuracy: 100, cooldown: 6000, skillCheck: SkillCheckType.REFLEX },
+      { id: 'rush', name: 'Aerial Rush', description: 'Multi-hit.', type: MoveType.ATTACK, power: 12, cost: 15, accuracy: 90, cooldown: 2500, skillCheck: SkillCheckType.COMBO },
+      { id: 'evade', name: 'Barrel Roll', description: 'Dodge next attack.', type: MoveType.DEFENSE, power: 0, cost: 10, accuracy: 100, cooldown: 4000, effect: 'dodge' }
     ],
-    huntingConfig: {
-      baseRate: 1.2,
-      description: 'Keen eyes. 5% Chance to find Scrap.'
-    }
+    huntingConfig: { baseRate: 1.2, description: 'Fast but finds less scrap.' }
   },
   {
     id: 'owl',
     name: 'Owl',
-    species: 'Wisdom Class',
-    description: 'High energy and accuracy. Specializes in night combat.',
-    imageUrl: 'https://images.unsplash.com/photo-1540455806655-46f90ba031d2?q=80&w=800&auto=format&fit=crop',
-    baseHp: 100,
-    baseEnergy: 130,
-    baseAttack: 55,
-    baseDefense: 35,
-    baseSpeed: 55,
+    species: 'Night Watcher',
+    description: 'High defense and magic/special moves.',
+    imageUrl: 'https://placehold.co/400x400/1e293b/475569?text=Owl',
+    baseHp: 90,
+    baseEnergy: 120,
+    baseAttack: 8,
+    baseDefense: 8,
+    baseSpeed: 4,
     baseStats: {
-      hp: [100, 120],
-      energy: [130, 150],
-      attack: [55, 65],
-      defense: [35, 45],
-      speed: [55, 65]
+        hp: [85, 100],
+        energy: [110, 130],
+        attack: [6, 10],
+        defense: [6, 10],
+        speed: [3, 5]
     },
     passive: {
-      name: 'Night Vision',
-      description: 'Immune to accuracy penalties.'
+      name: 'Wisdom',
+      description: 'Gains more XP from battles.'
     },
     moves: [
-      { id: 'silent_swoop', name: 'Silent Swoop', description: 'Stealth attack.', type: MoveType.ATTACK, power: 30, cost: 15, accuracy: 100, cooldown: 7000, skillCheck: SkillCheckType.TIMING },
-      { id: 'feint', name: 'Feint', description: 'Confuse enemy.', type: MoveType.DEFENSE, power: 0, cost: 10, accuracy: 100, effect: 'dodge', cooldown: 12000, skillCheck: SkillCheckType.REFLEX },
-      { id: 'meditate', name: 'Meditate', description: 'Focus energy to heal.', type: MoveType.HEAL, power: 25, cost: 30, accuracy: 100, cooldown: 25000, skillCheck: SkillCheckType.REFLEX },
-      { id: 'moon_beam', name: 'Moon Beam', description: 'Concentrated lunar energy.', type: MoveType.SPECIAL, power: 65, cost: 50, accuracy: 90, cooldown: 30000, skillCheck: SkillCheckType.MASH }
+      { id: 'hoot', name: 'Sonic Wave', description: 'Hits all ranges.', type: MoveType.SPECIAL, power: 25, cost: 20, accuracy: 100, cooldown: 3000, skillCheck: SkillCheckType.TIMING },
+      { id: 'glare', name: 'Hypnosis', description: 'Lowers enemy damage.', type: MoveType.SPECIAL, power: 0, cost: 25, accuracy: 90, cooldown: 8000, skillCheck: SkillCheckType.MASH },
+      { id: 'wing_shield', name: 'Wing Shield', description: 'Blocks damage.', type: MoveType.DEFENSE, power: 0, cost: 15, accuracy: 100, cooldown: 5000, skillCheck: SkillCheckType.REFLEX, effect: 'shield' },
+      { id: 'gust', name: 'Gust', description: 'Push back.', type: MoveType.ATTACK, power: 15, cost: 10, accuracy: 95, cooldown: 2000, skillCheck: SkillCheckType.FLICK }
     ],
-    huntingConfig: {
-      baseRate: 1.1,
-      description: 'Wise hunter. 25% Chance to gain Passive XP while hunting.'
-    }
+    huntingConfig: { baseRate: 0.9, description: 'Bonus XP during hunts.' }
+  },
+  {
+    id: 'hummingbird',
+    name: 'Hummingbird',
+    species: 'Speed Demon',
+    description: 'Extremely fast but fragile.',
+    imageUrl: 'https://placehold.co/400x400/1e293b/475569?text=Hummingbird',
+    baseHp: 50,
+    baseEnergy: 150,
+    baseAttack: 6,
+    baseDefense: 2,
+    baseSpeed: 15,
+    baseStats: {
+        hp: [45, 60],
+        energy: [130, 160],
+        attack: [5, 8],
+        defense: [1, 3],
+        speed: [12, 18]
+    },
+    passive: {
+      name: 'Hyper Metabolism',
+      description: 'Regenerates energy faster.'
+    },
+    moves: [
+      { id: 'zip', name: 'Zip', description: 'Instant hit.', type: MoveType.ATTACK, power: 10, cost: 5, accuracy: 100, cooldown: 500, skillCheck: SkillCheckType.MASH },
+      { id: 'swarm', name: 'Needle Flurry', description: 'Many small hits.', type: MoveType.ATTACK, power: 30, cost: 30, accuracy: 85, cooldown: 3000, skillCheck: SkillCheckType.COMBO },
+      { id: 'dodge', name: 'Blur', description: 'High dodge chance.', type: MoveType.DEFENSE, power: 0, cost: 20, accuracy: 100, cooldown: 2000, skillCheck: SkillCheckType.REFLEX, effect: 'dodge' },
+      { id: 'drain', name: 'Nectar Drain', description: 'Steals health.', type: MoveType.DRAIN, power: 20, cost: 25, accuracy: 95, cooldown: 4000, skillCheck: SkillCheckType.DRAIN_GAME }
+    ],
+    huntingConfig: { baseRate: 1.5, description: 'Chance for double yield.' }
   },
   {
     id: 'vulture',
     name: 'Vulture',
-    species: 'Scavenger Class',
-    description: 'High defense and survival. Can drain health.',
-    imageUrl: 'https://images.unsplash.com/photo-1516641888365-1d4a8e0108ec?q=80&w=800&auto=format&fit=crop',
-    baseHp: 140,
-    baseEnergy: 70,
-    baseAttack: 50,
-    baseDefense: 65,
-    baseSpeed: 30,
+    species: 'Scavenger',
+    description: 'Durable survivor.',
+    imageUrl: 'https://placehold.co/400x400/1e293b/475569?text=Vulture',
+    baseHp: 120,
+    baseEnergy: 80,
+    baseAttack: 9,
+    baseDefense: 7,
+    baseSpeed: 5,
     baseStats: {
-      hp: [140, 160],
-      energy: [70, 90],
-      attack: [50, 60],
-      defense: [65, 80],
-      speed: [30, 40]
+        hp: [110, 140],
+        energy: [70, 90],
+        attack: [7, 11],
+        defense: [6, 9],
+        speed: [4, 6]
     },
     passive: {
       name: 'Rot Eater',
@@ -158,61 +146,47 @@ export const BIRD_TEMPLATES: BirdTemplate[] = [
     },
     moves: [
       { id: 'acid_puke', name: 'Acid Bile', description: 'Corrosive attack.', type: MoveType.ATTACK, power: 25, cost: 15, accuracy: 90, cooldown: 1500, skillCheck: SkillCheckType.MASH },
-      { id: 'harden', name: 'Harden', description: 'Toughen skin.', type: MoveType.DEFENSE, power: 0, cost: 15, accuracy: 100, cooldown: 3000, skillCheck: SkillCheckType.REFLEX },
+      { id: 'harden', name: 'Harden', description: 'Toughen skin.', type: MoveType.DEFENSE, power: 0, cost: 15, accuracy: 100, cooldown: 8000, skillCheck: SkillCheckType.REFLEX, effect: 'shield' },
       { id: 'carrion_feast', name: 'Carrion Feast', description: 'Drain life from enemy.', type: MoveType.DRAIN, power: 40, cost: 35, accuracy: 95, cooldown: 4500, skillCheck: SkillCheckType.DRAIN_GAME },
       { id: 'bone_drop', name: 'Bone Drop', description: 'Drop from height.', type: MoveType.SPECIAL, power: 60, cost: 45, accuracy: 85, requiresHeight: true, cooldown: 6000, skillCheck: SkillCheckType.TIMING }
     ],
     huntingConfig: {
       baseRate: 0.8,
-      description: 'Scavenger. 2% Chance to find Items.'
+      description: 'Higher chance to find Items.'
     }
   }
 ];
 
-const getRandomInRange = (range: [number, number]) => {
-  return Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
-};
+export const BIRDS = BIRD_TEMPLATES;
 
 export const generateBird = (template: BirdTemplate, rarity: Rarity): BirdInstance => {
-  const rarityConfig = RARITY_CONFIG[rarity];
-  const tierMult = rarityConfig.minMult + Math.random() * (rarityConfig.maxMult - rarityConfig.minMult);
-  
-  const baseHp = getRandomInRange(template.baseStats.hp);
-  const baseEnergy = getRandomInRange(template.baseStats.energy);
-  const baseAttack = getRandomInRange(template.baseStats.attack);
-  const baseDefense = getRandomInRange(template.baseStats.defense);
-  const baseSpeed = getRandomInRange(template.baseStats.speed);
+    // Basic scaling based on rarity
+    let multiplier = 1.0;
+    if (rarity === Rarity.UNCOMMON) multiplier = 1.1;
+    if (rarity === Rarity.RARE) multiplier = 1.3;
+    if (rarity === Rarity.EPIC) multiplier = 1.6;
+    if (rarity === Rarity.LEGENDARY) multiplier = 2.0;
+    if (rarity === Rarity.MYTHIC) multiplier = 3.0;
 
-  return {
-    id: template.id,
-    name: template.name,
-    species: template.species,
-    description: template.description,
-    imageUrl: template.imageUrl,
-    passive: template.passive,
-    moves: template.moves,
-    huntingConfig: template.huntingConfig,
-    baseStats: template.baseStats,
-    
-    baseHp: Math.floor(baseHp * tierMult),
-    baseEnergy: Math.floor(baseEnergy * tierMult),
-    baseAttack: Math.floor(baseAttack * tierMult),
-    baseDefense: Math.floor(baseDefense * tierMult),
-    baseSpeed: Math.floor(baseSpeed * tierMult),
-    
-    instanceId: Math.random().toString(36).substring(7),
-    rarity,
-    level: 1,
-    xp: 0,
-    xpToNextLevel: 100,
-    statPoints: 0,
-    kills: 0,
-    prestigeLevel: 0,
-    gear: {
-        beak: null,
-        claws: null
-    }
-  };
+    const rollStat = (range: [number, number]) => {
+        return Math.floor((range[0] + Math.random() * (range[1] - range[0])) * multiplier);
+    };
+
+    return {
+        ...template,
+        instanceId: Math.random().toString(36).substring(7),
+        rarity,
+        level: 1,
+        xp: 0,
+        xpToNextLevel: 100,
+        statPoints: 0,
+        kills: 0,
+        prestigeLevel: 0,
+        gear: { beak: null, claws: null },
+        baseHp: rollStat(template.baseStats.hp),
+        baseEnergy: rollStat(template.baseStats.energy),
+        baseAttack: rollStat(template.baseStats.attack),
+        baseDefense: rollStat(template.baseStats.defense),
+        baseSpeed: rollStat(template.baseStats.speed),
+    };
 };
-
-export const BIRDS: Bird[] = BIRD_TEMPLATES;

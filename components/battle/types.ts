@@ -1,3 +1,4 @@
+
 import { Move, SkillCheckType } from '../../types';
 
 export interface FloatingText {
@@ -8,6 +9,8 @@ export interface FloatingText {
   color: string;
   scale?: number;
   target: 'player' | 'opponent';
+  icon?: 'shield';
+  customType?: 'rot-eater';
 }
 
 export interface Particle {

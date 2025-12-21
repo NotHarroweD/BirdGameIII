@@ -1,3 +1,4 @@
+
 ![Deploy Website](https://github.com/NotHarroweD/BirdGameIII/actions/workflows/deploy.yml/badge.svg)
 # 🦅 Bird Game 3: Wings of Glory
 
@@ -6,6 +7,14 @@ Welcome to the official repository for **Bird Game 3**, a tactical avian combat 
 ---
 
 ## 🛠 Latest Update Log
+
+### [1.3.1] - Asset Path Stabilization
+**Release Date: Current**
+
+#### 🐛 Bug Fixes
+- **Module Resolution**: Corrected image import paths in the bird data definitions. Replaced alias-based imports (`@/`) with relative paths to resolve browser-side module specifier errors and ensure assets load correctly in production builds.
+
+---
 
 ### [1.3.0] - Mechanical Refinement & UI Polish
 **Release Date: Current**

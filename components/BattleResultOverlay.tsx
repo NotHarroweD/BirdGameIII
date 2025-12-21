@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { BirdInstance, Rarity, Gem, Consumable, EnemyPrefix, StatType, StatOption } from '../types';
 import { RARITY_CONFIG, XP_TABLE } from '../constants';
 import { Button } from './Button';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Hexagon, Briefcase, Gem as GemIcon, Star, Skull, Check, Award, Hammer, Map, RotateCcw, ArrowUp, Heart, Shield, Wind, Target, ArrowRight } from 'lucide-react';
-import { getScaledStats } from './battle/utils';
+import { Zap, Hexagon, Briefcase, Gem as GemIcon, Star, Skull, Check, Award, Hammer, Map, RotateCcw, ArrowUp, Heart, Shield, Wind, Target, ArrowRight, Loader } from 'lucide-react';
+import { getScaledStats, generateStatOptions } from './battle/utils';
 
 const LootItem: React.FC<{ 
     icon: React.ReactNode, 
@@ -119,10 +120,13 @@ export const BattleResultOverlay: React.FC<{
     
     const isVictory = winner === 'player';
     
+    // Capture initial bird state on mount to ensure stable animation baseline
+    const [startBird] = useState(initialBird);
+    
     const [displayFeathers, setDisplayFeathers] = useState(0);
     const [displayScrap, setDisplayScrap] = useState(0);
     const [displayXp, setDisplayXp] = useState(0);
-    const [displayCurrentXp, setDisplayCurrentXp] = useState(initialBird.xp);
+    const [displayCurrentXp, setDisplayCurrentXp] = useState(startBird.xp);
     const [xpBarWidth, setXpBarWidth] = useState(0);
     const [showLoot, setShowLoot] = useState(false);
     const [showButtons, setShowButtons] = useState(false);
@@ -130,20 +134,31 @@ export const BattleResultOverlay: React.FC<{
     const [showLevelUpRewards, setShowLevelUpRewards] = useState(false);
     const [rewardsClaimed, setRewardsClaimed] = useState(false);
 
-    const finalLevel = React.useMemo(() => {
-        if (!isVictory) return initialBird.level;
-        let lvl = initialBird.level;
-        let xp = initialBird.xp + rewards.xp;
-        let next = initialBird.xpToNextLevel;
+    // Predict final level based on rewards
+    const finalLevel = useMemo(() => {
+        if (!isVictory) return startBird.level;
+        let lvl = startBird.level;
+        let xp = startBird.xp + rewards.xp;
+        let next = startBird.xpToNextLevel;
         while (xp >= next) {
             xp -= next;
             lvl++;
             next = Math.floor(XP_TABLE.BASE * Math.pow(lvl, XP_TABLE.GROWTH_FACTOR));
         }
         return lvl;
-    }, [isVictory, initialBird, rewards]);
+    }, [isVictory, startBird, rewards]);
 
-    const isLevelUp = finalLevel > initialBird.level;
+    const levelsGained = finalLevel - startBird.level;
+    
+    // Check if the updated bird prop has actually caught up to the calculated final level
+    const isBirdSynced = updatedBird && updatedBird.level === finalLevel;
+    
+    // Calculate which level we are currently applying rewards for
+    const currentRewardLevel = useMemo(() => {
+        if (!updatedBird) return finalLevel;
+        // Current Level minus remaining points plus 1 equals the level we are currently funding
+        return Math.max(1, updatedBird.level - updatedBird.statPoints + 1);
+    }, [updatedBird, finalLevel]);
 
     const handleLevelUpClick = () => {
         if (rewardsClaimed) return;
@@ -154,13 +169,14 @@ export const BattleResultOverlay: React.FC<{
         if (onApplyLevelUpReward) {
             onApplyLevelUpReward(initialBird.instanceId, option.stat, option.value);
         }
+        // Check updatedBird (which reflects latest state) to see if we're done
         if (updatedBird && updatedBird.statPoints <= 1) {
             setRewardsClaimed(true);
             setShowLevelUpRewards(false);
         }
     };
 
-    const isZoneCleared = React.useMemo(() => {
+    const isZoneCleared = useMemo(() => {
         if (!isVictory || !isHighestZone) return false;
         const newProgress = new Set(currentZoneProgress);
         newProgress.add(opponentRarity);
@@ -173,17 +189,17 @@ export const BattleResultOverlay: React.FC<{
             return;
         }
 
-        const countDelay = 50; 
-        const startXP = initialBird.xp;
-        const endXP = initialBird.xp + rewards.xp;
-        const maxXP = initialBird.xpToNextLevel;
+        const countDelay = 300; 
+        const startXP = startBird.xp;
+        const endXP = startBird.xp + rewards.xp;
+        const maxXP = startBird.xpToNextLevel;
         const initialPercent = Math.min(100, (startXP / maxXP) * 100);
         setXpBarWidth(initialPercent);
         setDisplayCurrentXp(startXP);
 
         let animationFrameId: number;
         let startTime: number;
-        const duration = 250; 
+        const duration = 1500; 
 
         const startCounting = () => {
             startTime = Date.now();
@@ -191,7 +207,7 @@ export const BattleResultOverlay: React.FC<{
                 const now = Date.now();
                 const elapsed = now - startTime;
                 const progress = Math.min(1, elapsed / duration);
-                const ease = 1 - Math.pow(1 - progress, 3);
+                const ease = 1 - Math.pow(1 - progress, 4);
 
                 setDisplayFeathers(Math.floor(rewards.feathers * ease));
                 setDisplayScrap(Math.floor(rewards.scrap * ease));
@@ -200,6 +216,7 @@ export const BattleResultOverlay: React.FC<{
                 const currentAnimatedXp = startXP + ((endXP - startXP) * ease);
                 setDisplayCurrentXp(currentAnimatedXp);
                 
+                // If we leveled up, fill bar to 100 visually during animation
                 const percent = Math.min(100, (currentAnimatedXp / maxXP) * 100);
                 setXpBarWidth(percent);
 
@@ -257,6 +274,11 @@ export const BattleResultOverlay: React.FC<{
         </div>
     );
 
+    // Ensure options exist if points exist - failsafe for missing pendingStatOptions
+    const statOptions = (updatedBird && updatedBird.statPoints > 0) 
+        ? (updatedBird.pendingStatOptions || generateStatOptions()) 
+        : [];
+
     return (
         <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -313,7 +335,7 @@ export const BattleResultOverlay: React.FC<{
                                 initial={{ scaleX: 0, opacity: 0 }}
                                 animate={{ scaleX: 1, opacity: 1 }}
                                 transition={{ duration: 0.2 }}
-                                className={`p-3 rounded-lg border relative overflow-hidden group shadow-lg transition-all duration-300 ${isSpecialXp ? 'bg-cyan-900/40 border-cyan-500/50 shadow-cyan-500/20' : 'bg-slate-900 border-slate-800'} ${isLevelUp ? 'min-h-[120px] flex flex-col justify-center' : ''}`}
+                                className={`p-3 rounded-lg border relative overflow-hidden group shadow-lg transition-all duration-300 ${isSpecialXp ? 'bg-cyan-900/40 border-cyan-500/50 shadow-cyan-500/20' : 'bg-slate-900 border-slate-800'} ${levelsGained > 0 ? 'min-h-[120px] flex flex-col justify-center' : ''}`}
                             >
                                 <div className="flex justify-between items-center mb-1 relative z-10">
                                     <div className={`flex items-center gap-2 text-xs font-bold ${isSpecialXp ? 'text-cyan-300' : 'text-yellow-400'}`}>
@@ -338,26 +360,57 @@ export const BattleResultOverlay: React.FC<{
                                         {Math.floor(displayCurrentXp)} / {initialBird.xpToNextLevel} XP
                                     </div>
                                 </div>
-                                {(xpBarWidth >= 100 || isLevelUp) && (
+                                {xpBarWidth >= 100 && (
                                     <motion.button
                                         onClick={handleLevelUpClick}
                                         initial={{ scale: 0, opacity: 0 }} 
                                         animate={{ scale: 1, opacity: 1 }}
                                         className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 z-20 backdrop-blur-sm cursor-pointer hover:bg-slate-900 transition-colors group"
-                                        disabled={rewardsClaimed}
+                                        disabled={rewardsClaimed || !isBirdSynced}
                                     >
-                                        <span className={`text-yellow-400 font-black font-tech tracking-widest drop-shadow-[0_0_10px_rgba(250,204,21,0.8)] text-2xl ${!rewardsClaimed ? 'animate-pulse' : ''}`}>
-                                            {rewardsClaimed ? 'UPGRADE APPLIED' : (finalLevel - initialBird.level > 1) ? `LEVEL UP x${finalLevel - initialBird.level}!` : 'LEVEL UP!'}
-                                        </span>
-                                        {!rewardsClaimed && (
-                                            <span className="text-[10px] text-yellow-200 mt-1 uppercase tracking-wider bg-yellow-900/40 px-2 py-0.5 rounded border border-yellow-700/50">
-                                                Tap to claim rewards
-                                            </span>
+                                        {!isBirdSynced ? (
+                                            <div className="flex flex-col items-center animate-pulse text-slate-400">
+                                                <Loader size={24} className="animate-spin mb-1" />
+                                                <span className="text-xs font-bold uppercase tracking-wider">Synchronizing Data...</span>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <span className={`text-yellow-400 font-black font-tech tracking-widest drop-shadow-[0_0_10px_rgba(250,204,21,0.8)] text-2xl ${!rewardsClaimed ? 'animate-pulse' : ''}`}>
+                                                    {rewardsClaimed 
+                                                        ? 'UPGRADE APPLIED' 
+                                                        : (levelsGained > 0 
+                                                            ? (levelsGained > 1 ? `LEVEL UP x${levelsGained}!` : 'LEVEL UP!') 
+                                                            : 'UPGRADE READY')
+                                                    }
+                                                </span>
+                                                {!rewardsClaimed && (
+                                                    <span className="text-[10px] text-yellow-200 mt-1 uppercase tracking-wider bg-yellow-900/40 px-2 py-0.5 rounded border border-yellow-700/50">
+                                                        Tap to claim rewards
+                                                    </span>
+                                                )}
+                                                <span className="text-white font-mono font-bold text-xl mt-1 drop-shadow-md">
+                                                    LVL {finalLevel}
+                                                </span>
+                                            </>
                                         )}
-                                        <span className="text-white font-mono font-bold text-xl mt-1 drop-shadow-md">LVL {finalLevel}</span>
                                     </motion.button>
                                 )}
                             </motion.div>
+
+                            {/* Pending Points Button - Only show if points available from PREVIOUS battles (xpBarWidth < 100 means we didn't just level up) */}
+                            {showButtons && xpBarWidth < 100 && initialBird.statPoints > 0 && !rewardsClaimed && (
+                                <motion.button
+                                    onClick={handleLevelUpClick}
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    className="w-full flex items-center justify-center gap-2 py-2 cursor-pointer group"
+                                >
+                                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest group-hover:text-amber-300 transition-colors">
+                                        Unused Upgrade Points Available ({initialBird.statPoints})
+                                    </span>
+                                </motion.button>
+                            )}
                             
                             <div className="grid grid-cols-2 gap-3">
                                  <motion.div 
@@ -496,7 +549,7 @@ export const BattleResultOverlay: React.FC<{
             </motion.div>
 
             <AnimatePresence>
-                {showLevelUpRewards && updatedBird && updatedBird.pendingStatOptions && (
+                {showLevelUpRewards && updatedBird && (
                     <motion.div 
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-6"
@@ -509,7 +562,7 @@ export const BattleResultOverlay: React.FC<{
                             <div className="w-full flex items-center justify-center gap-2 mb-2 shrink-0">
                                 <ArrowUp size={24} className="text-yellow-400 animate-bounce" />
                                 <h2 className="font-tech text-2xl text-white uppercase tracking-widest text-center">
-                                    LEVEL UP
+                                    LEVEL {currentRewardLevel} REWARDS
                                 </h2>
                                 <ArrowUp size={24} className="text-yellow-400 animate-bounce" />
                             </div>
@@ -519,7 +572,7 @@ export const BattleResultOverlay: React.FC<{
 
                             <div className="w-full bg-slate-950 p-3 rounded-lg border border-slate-800 mb-4 shrink-0">
                                 <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 text-center border-b border-slate-800 pb-1">
-                                    Improvements
+                                    Current Stats
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
                                     <StatChangeRow label="HP" oldVal={oldStats.maxHp} newVal={newStats.maxHp} icon={Heart} color="text-emerald-400" />
@@ -542,7 +595,7 @@ export const BattleResultOverlay: React.FC<{
                             </div>
 
                             <div className="flex flex-col gap-2 w-full shrink-0">
-                                {updatedBird.pendingStatOptions.map((opt, i) => {
+                                {statOptions.map((opt, i) => {
                                     let Icon = Zap;
                                     if (opt.stat === 'HP') Icon = Heart;
                                     if (opt.stat === 'DEF') Icon = Shield;

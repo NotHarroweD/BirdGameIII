@@ -6,6 +6,7 @@ export interface CombatResult {
     isCrit: boolean;
     isHit: boolean;
     appliedBleed: boolean;
+    blockedDamage?: number;
 }
 
 export const calculateCombatResult = (
@@ -71,6 +72,15 @@ export const calculateCombatResult = (
 
     damage = Math.floor(damage);
 
+    // Shield Block Logic
+    let blockedDamage = 0;
+    const hasShield = defender.statusEffects.some(e => e.type === 'shield');
+    if (hasShield && damage > 0) {
+        const originalDamage = damage;
+        damage = Math.floor(damage * 0.5); // 50% Reduction
+        blockedDamage = originalDamage - damage;
+    }
+
     // Bleed Application
     let appliedBleed = false;
     // Check both gear slots for SHARP prefix
@@ -89,5 +99,5 @@ export const calculateCombatResult = (
         }
     }
 
-    return { damage, isCrit, isHit: true, appliedBleed };
+    return { damage, isCrit, isHit: true, appliedBleed, blockedDamage };
 };

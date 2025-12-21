@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Activity, Droplets, Zap, Wind } from 'lucide-react';
+import { Activity, Droplets, Zap, Wind, Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Rarity } from '../../types';
 import { RARITY_CONFIG } from '../../constants';
@@ -13,6 +12,7 @@ export const StatusBadge: React.FC<{ type: string }> = ({ type }) => {
     if (type === 'bleed') { icon = <Droplets size={12} />; color = "text-rose-500"; label = "BLEED"; }
     if (type === 'stun') { icon = <Zap size={12} />; color = "text-yellow-500"; label = "STUN"; }
     if (type === 'dodge') { icon = <Wind size={12} />; color = "text-cyan-500"; label = "EVASIVE"; }
+    if (type === 'shield') { icon = <Shield size={12} />; color = "text-blue-400"; label = "SHIELD"; }
 
     return (
         <motion.div 

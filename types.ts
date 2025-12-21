@@ -193,6 +193,12 @@ export interface BirdInstance extends Bird {
   pendingStatOptions?: StatOption[];
 }
 
+export interface BattleEffect {
+  type: string;
+  startTime: number;
+  duration: number;
+}
+
 export interface BattleBird extends BirdInstance {
   currentHp: number;
   currentEnergy: number;
@@ -202,7 +208,7 @@ export interface BattleBird extends BirdInstance {
   defense: number;
   speed: number;
   isDefending: boolean;
-  statusEffects: string[];
+  statusEffects: BattleEffect[];
   altitude: Altitude;
   enemyPrefix?: EnemyPrefix;
 }

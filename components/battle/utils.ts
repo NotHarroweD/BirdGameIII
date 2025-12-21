@@ -1,4 +1,5 @@
-import { BirdInstance, EnemyPrefix, Gear, GearPrefix, MoveType, Rarity, StatBonus, StatType } from '../../types';
+
+import { BirdInstance, EnemyPrefix, Gear, GearPrefix, MoveType, Rarity, StatBonus, StatType, StatOption } from '../../types';
 import { RARITY_CONFIG } from '../../constants';
 
 export const calculateYield = (bird: BirdInstance, level: number) => {
@@ -111,4 +112,46 @@ export const getReflexColor = (type: MoveType, value: number) => {
     const g = Math.round(end[1] + (start[1] - end[1]) * t);
     const b = Math.round(end[2] + (start[2] - end[2]) * t);
     return `rgb(${r}, ${g}, ${b})`;
+};
+
+export const generateStatOptions = (): StatOption[] => {
+    const stats: StatType[] = ['HP', 'ATK', 'DEF', 'SPD', 'NRG'];
+    const options: StatOption[] = [];
+    
+    for(let i = 0; i < 3; i++) {
+        const stat = stats[Math.floor(Math.random() * stats.length)];
+        const roll = Math.random();
+        let upgradeRarity = Rarity.COMMON;
+        
+        if (roll < 0.001) upgradeRarity = Rarity.MYTHIC;
+        else if (roll < 0.005) upgradeRarity = Rarity.LEGENDARY;
+        else if (roll < 0.025) upgradeRarity = Rarity.EPIC;
+        else if (roll < 0.105) upgradeRarity = Rarity.RARE;
+        else if (roll < 0.355) upgradeRarity = Rarity.UNCOMMON;
+        
+        let min = 1;
+        let max = 1;
+
+        if (stat === 'HP' || stat === 'NRG') {
+            if (upgradeRarity === Rarity.COMMON) { min = 5; max = 8; }
+            else if (upgradeRarity === Rarity.UNCOMMON) { min = 9; max = 15; }
+            else if (upgradeRarity === Rarity.RARE) { min = 16; max = 25; }
+            else if (upgradeRarity === Rarity.EPIC) { min = 26; max = 40; }
+            else if (upgradeRarity === Rarity.LEGENDARY) { min = 41; max = 60; }
+            else if (upgradeRarity === Rarity.MYTHIC) { min = 61; max = 85; }
+        } else {
+            if (upgradeRarity === Rarity.COMMON) { min = 1; max = 1; }
+            else if (upgradeRarity === Rarity.UNCOMMON) { min = 2; max = 2; }
+            else if (upgradeRarity === Rarity.RARE) { min = 3; max = 3; }
+            else if (upgradeRarity === Rarity.EPIC) { min = 4; max = 5; }
+            else if (upgradeRarity === Rarity.LEGENDARY) { min = 6; max = 7; }
+            else if (upgradeRarity === Rarity.MYTHIC) { min = 8; max = 10; }
+        }
+        
+        const value = Math.floor(min + Math.random() * (max - min + 1));
+        const label = stat === 'HP' ? 'Max Health' : stat === 'ATK' ? 'Attack' : stat === 'DEF' ? 'Defense' : stat === 'SPD' ? 'Speed' : 'Max Energy';
+        
+        options.push({ stat, value, label, rarity: upgradeRarity });
+    }
+    return options;
 };

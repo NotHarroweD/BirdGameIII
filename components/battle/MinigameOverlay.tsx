@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SkillCheckType, MoveType } from '../../types';
@@ -15,11 +16,13 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
     const [stage, setStage] = useState(1);
     const [bones, setBones] = useState<BoneData[]>([]);
     const [reflexTargets, setReflexTargets] = useState<any[]>([]);
+    const [reflexParticles, setReflexParticles] = useState<any[]>([]);
+    const [zoneBursts, setZoneBursts] = useState<{id: number, left: number, color: string}[]>([]);
     const [hitFeedback, setHitFeedback] = useState<any>(null);
     const [targetZone, setTargetZone] = useState({ start: 40, width: 20 });
     const [cursorPos, setCursorPos] = useState<{ x: number, y: number } | null>(null);
     const [isHolding, setIsHolding] = useState(false);
-    const [completionRating, setCompletionRating] = useState<{ text: string, color: string, mult: number } | null>(null);
+    const [completionRating, setCompletionRating] = useState<{ text: string, color: string, mult: number, details?: string, drainStats?: { damage: number, heal: number } } | null>(null);
     const [tapMarkers, setTapMarkers] = useState<{ id: number, pos: number, color: string }[]>([]);
     const [screenFlash, setScreenFlash] = useState(false);
     const [zoneFlash, setZoneFlash] = useState<'success' | 'fail' | null>(null);
@@ -55,8 +58,9 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
     });
 
     const getMashColor = (p: number) => {
-        const hue = (p * 1.2); 
-        return `hsl(${hue}, 85%, 45%)`;
+        if (p >= 90) return '#3b82f6'; // Perfect (Blue)
+        if (p >= 40) return '#fbbf24'; // Good (Yellow)
+        return '#ef4444'; // Weak (Red)
     };
 
     useEffect(() => {
@@ -81,6 +85,8 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
             setTargetDirection(null);
             setPastSlashes([]);
             setReflexTargets([]);
+            setReflexParticles([]);
+            setZoneBursts([]);
             return;
         }
 
@@ -117,6 +123,8 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         setIsFlickSuccess(false);
         setPastSlashes([]);
         setReflexTargets([]); 
+        setReflexParticles([]);
+        setZoneBursts([]);
 
         if (activeSkillCheck.type === SkillCheckType.FLICK) {
             const dirs = [
@@ -130,23 +138,30 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
 
         if (activeSkillCheck.type === SkillCheckType.REFLEX) {
             setReflexTargets([
-                { id: 1, x: 30 + Math.random() * 40, y: 30 + Math.random() * 40, value: 100, hit: false, rotation: (Math.random() - 0.5) * 30, baseScale: 1.0 },
-                { id: 2, x: 30 + Math.random() * 40, y: 30 + Math.random() * 40, value: 100, hit: false, rotation: (Math.random() - 0.5) * 30, baseScale: 1.1 },
-                { id: 3, x: 30 + Math.random() * 40, y: 30 + Math.random() * 40, value: 100, hit: false, rotation: (Math.random() - 0.5) * 30, baseScale: 0.9 }
+                { id: 1, x: 35 + Math.random() * 30, y: 35 + Math.random() * 30, value: 100, hit: false, rotation: (Math.random() - 0.5) * 30, baseScale: 1.0 },
+                { id: 2, x: 35 + Math.random() * 30, y: 35 + Math.random() * 30, value: 100, hit: false, rotation: (Math.random() - 0.5) * 30, baseScale: 1.1 },
+                { id: 3, x: 35 + Math.random() * 30, y: 35 + Math.random() * 30, value: 100, hit: false, rotation: (Math.random() - 0.5) * 30, baseScale: 0.9 }
             ]);
         }
 
         if (activeSkillCheck.type === SkillCheckType.DRAIN_GAME) {
-            const boneCount = 12;
+            const boneCount = 16;
             const initialBones: BoneData[] = Array.from({ length: boneCount }).map((_, i) => {
-                const angle = (i / boneCount) * Math.PI * 2;
-                const speed = 10 + Math.random() * 4;
+                const angle = (i / boneCount) * 2 * Math.PI;
+                const x = 50; 
+                const y = 50; 
+                
+                // Explode outwards into a ring
+                const speed = 7; 
+                const vx = Math.cos(angle) * speed;
+                const vy = Math.sin(angle) * speed;
+
                 return {
                     id: Date.now() + i,
-                    x: 50 + Math.cos(angle) * 3,
-                    y: 50 + Math.pow(Math.random(), 0.5) * 40,
-                    vx: Math.cos(angle) * speed,
-                    vy: Math.sin(angle) * speed,
+                    x: x,
+                    y: y,
+                    vx: vx,
+                    vy: vy,
                     collected: false
                 };
             });
@@ -154,10 +169,7 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         }
 
         const update = () => {
-            if (stateRef.current.isDone) {
-                frameRef.current = requestAnimationFrame(update);
-                return;
-            }
+            if (!activeSkillCheck || stateRef.current.isDone) return;
 
             const isLocked = stateRef.current.isPaused;
             const now = Date.now();
@@ -217,14 +229,61 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                         return { ...h, x: nx, y: ny };
                     });
                     
-                    if (updated.every(b => b.collected) && !stateRef.current.isPaused) {
+                    const timeElapsed = Date.now() - stateRef.current.startTime;
+                    const allCollected = updated.every(b => b.collected);
+                    const timeUp = timeElapsed > 5000;
+
+                    if ((allCollected || timeUp) && !stateRef.current.isPaused) {
                         stateRef.current.isPaused = true;
-                        const elapsed = (Date.now() - stateRef.current.startTime) / 1000;
-                        let rating = { text: "Weak Snack", color: "text-slate-400", mult: 1.2 };
-                        if (elapsed < 1.3) rating = { text: "Perfect Feast", color: "text-yellow-400", mult: 3.0 };
-                        else if (elapsed < 2.2) rating = { text: "Good Meal", color: "text-emerald-400", mult: 2.0 };
-                        setCompletionRating(rating);
-                        setTimeout(() => resolve(rating.mult, 1.0), 800);
+                        
+                        const collectedCount = updated.filter(b => b.collected).length;
+                        
+                        let multiplier = 1.0;
+                        let totalDmg = 0;
+                        let totalHeal = 0;
+                        let text = "FEEDING COMPLETE";
+                        let color = "text-slate-400";
+                        let isSuperFast = false;
+
+                        if (allCollected) {
+                            // Speed based logic for full collection
+                            if (timeElapsed < 2000) { // Super Fast - Made tougher from 2200
+                                multiplier = 3.0; 
+                                totalDmg = 350; 
+                                totalHeal = 250;
+                                text = "VORACIOUS HUNGER!";
+                                color = "text-fuchsia-400";
+                                isSuperFast = true;
+                                spawnSuperBurst(50, 50);
+                            } else if (timeElapsed < 3500) { // Fast
+                                multiplier = 2.5;
+                                totalDmg = 280;
+                                totalHeal = 200;
+                                text = "SWIFT FEAST";
+                                color = "text-purple-400";
+                            } else { // Normal
+                                multiplier = 2.0;
+                                totalDmg = 240; 
+                                totalHeal = 160; 
+                                text = "FULL BELLY";
+                                color = "text-purple-300";
+                            }
+                        } else {
+                            // Fallback based on count if time ran out
+                            multiplier = 1 + (collectedCount * 0.1); 
+                            totalDmg = collectedCount * 12;
+                            totalHeal = collectedCount * 8;
+                            text = collectedCount > 10 ? "GOOD MEAL" : "WEAK SNACK";
+                            color = collectedCount > 10 ? "text-emerald-400" : "text-slate-400";
+                        }
+
+                        setCompletionRating({ 
+                            text, 
+                            color, 
+                            mult: multiplier,
+                            drainStats: { damage: totalDmg, heal: totalHeal }
+                        });
+                        setTimeout(() => resolve(multiplier, 1.0), isSuperFast ? 1200 : 700);
                     }
                     return updated;
                 });
@@ -255,6 +314,141 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         onComplete(mult, secMult);
     };
 
+    const spawnSuperBurst = (x: number, y: number) => {
+        const newPs = [];
+        
+        // Primary purple burst ring - cleaner, less massive
+        newPs.push({
+            id: Math.random(),
+            x, y, tx: x, ty: y,
+            color: '#d946ef', // Fuchsia-500
+            scale: 4, 
+            duration: 0.6,
+            type: 'ring'
+        });
+
+        // Inner white clean ring
+        newPs.push({
+            id: Math.random(),
+            x, y, tx: x, ty: y,
+            color: '#ffffff',
+            scale: 2,
+            duration: 0.4,
+            type: 'ring'
+        });
+
+        // Reduced Particle Explosion (Cleaner)
+        for(let i=0; i<20; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 60 + Math.random() * 60; // Slightly tighter spread
+            newPs.push({
+                id: Math.random(),
+                x, y,
+                tx: x + (Math.cos(angle) * dist),
+                ty: y + (Math.sin(angle) * dist),
+                color: Math.random() > 0.5 ? '#d946ef' : '#f0abfc',
+                scale: 1.5 + Math.random() * 1.5,
+                duration: 0.6 + Math.random() * 0.4,
+                type: 'particle'
+            });
+        }
+
+        setReflexParticles(prev => [...prev, ...newPs]);
+        // Removed setScreenFlash(true) to reduce choppiness
+    };
+
+    const spawnPerfectBurst = (x: number, y: number, moveType: MoveType) => {
+        const isHeal = moveType === MoveType.HEAL;
+        const color = isHeal ? '#34d399' : '#38bdf8'; // Emerald-400 vs Sky-400
+        const overrideColor = moveType === MoveType.DRAIN ? '#a855f7' : color;
+        
+        const newPs = [];
+        
+        // Big shockwave
+        newPs.push({
+            id: Math.random(),
+            x, y, tx: x, ty: y,
+            color: overrideColor,
+            scale: 6,
+            duration: 0.8,
+            type: 'ring'
+        });
+        
+        // Inner white burst
+        newPs.push({
+            id: Math.random(),
+            x, y, tx: x, ty: y,
+            color: '#ffffff',
+            scale: 3,
+            duration: 0.4,
+            type: 'ring'
+        });
+
+        // Heavy particle count
+        for(let i=0; i<40; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 80 + Math.random() * 40;
+            newPs.push({
+                id: Math.random(),
+                x, y,
+                tx: x + (Math.cos(angle) * dist),
+                ty: y + (Math.sin(angle) * dist),
+                color: Math.random() > 0.5 ? overrideColor : '#ffffff',
+                scale: 1.5 + Math.random() * 1.5,
+                duration: 0.5 + Math.random() * 0.5,
+                type: 'particle'
+            });
+        }
+
+        setReflexParticles(prev => [...prev, ...newPs]);
+        setTimeout(() => {
+            setReflexParticles(prev => prev.filter(p => !newPs.find(np => np.id === p.id)));
+        }, 1000);
+    };
+
+    const spawnReflexPop = (t: any, index: number) => {
+        const color = getReflexColor(activeSkillCheck!.move.type, t.value);
+        const intensity = 1 + (index * 0.5);
+        
+        const newPs = [];
+        
+        // Burst particles
+        const particleCount = 12 + (index * 8);
+        for(let i=0; i<particleCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = (Math.random() * 20 + 10) * intensity;
+            newPs.push({
+                id: Math.random(),
+                x: t.x,
+                y: t.y,
+                tx: t.x + (Math.cos(angle) * dist),
+                ty: t.y + (Math.sin(angle) * dist),
+                color,
+                scale: (Math.random() * 0.5 + 0.5) * intensity,
+                duration: 0.4 + Math.random() * 0.2,
+                type: 'particle'
+            });
+        }
+        
+        // Shockwave Ring
+        newPs.push({
+            id: Math.random(),
+            x: t.x,
+            y: t.y,
+            tx: t.x,
+            ty: t.y,
+            color,
+            scale: 2 * intensity,
+            duration: 0.35,
+            type: 'ring'
+        });
+
+        setReflexParticles(prev => [...prev, ...newPs]);
+        setTimeout(() => {
+            setReflexParticles(prev => prev.filter(p => !newPs.find(np => np.id === p.id)));
+        }, 600);
+    };
+
     const handleInteraction = (e: React.PointerEvent) => {
         if (!activeSkillCheck || stateRef.current.isDone || stateRef.current.isPaused) return;
 
@@ -262,8 +456,7 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         
         if (activeSkillCheck.type === SkillCheckType.MASH) {
             e.preventDefault();
-            setMashFlash(true);
-            setTimeout(() => setMashFlash(false), 50);
+            // mashFlash state is not used in simplified render, skipping setMashFlash
             stateRef.current.progress = Math.min(100, stateRef.current.progress + 7.5);
             setProgress(stateRef.current.progress);
             if (stateRef.current.progress >= 100) {
@@ -283,10 +476,16 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
             const halfWidth = stateRef.current.targetZone.width / 2;
             const isHit = diff <= halfWidth;
 
-            const markerColor = isHit ? 'bg-emerald-400' : 'bg-rose-500';
+            // Updated success color to light green with distinct outline
+            const markerColor = isHit ? 'bg-emerald-300 border-2 border-emerald-950 shadow-[0_0_15px_#6ee7b7]' : 'bg-rose-500 border-2 border-rose-950 shadow-[0_0_15px_#f43f5e]';
             setResultColor(markerColor);
             setTapMarkers(prev => [...prev, { id: Date.now(), pos: markerPos, color: markerColor }]);
             
+            // Add Burst Effect for Zone
+            const burstColor = isHit ? '#10b981' : '#f43f5e';
+            setZoneBursts(prev => [...prev, { id: Date.now(), left: markerPos, color: burstColor }]);
+            setTimeout(() => setZoneBursts(prev => prev.slice(1)), 500);
+
             setScreenFlash(true);
             setTimeout(() => setScreenFlash(false), 100);
             setZoneFlash(isHit ? 'success' : 'fail');
@@ -391,24 +590,29 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         <motion.div 
             className="absolute h-full w-4 z-40 pointer-events-none"
             style={{ left: `${pos}%`, transform: 'translateX(-50%)' }}
-            animate={isActive && pointerFlash ? { scale: [1, 1.2, 1] } : {}}
-            transition={{ duration: 0.2 }}
+            animate={isActive && pointerFlash ? { scale: [1, 1.4, 1] } : {}}
+            transition={{ duration: 0.15 }}
         >
-            <div className={`h-full w-full bg-white shadow-[0_0_15px_rgba(255,255,255,0.6)] border-x border-slate-950/20`} />
+            {/* Main bone bar */}
+            <div className={`h-full w-full ${isActive && pointerFlash ? color : 'bg-white'} shadow-[0_0_15px_rgba(255,255,255,0.6)] border-x border-slate-950/20`} />
+            
+            {/* Top circles */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-[45%] flex gap-[-2px] items-center justify-center">
-                <div className={`w-5 h-5 rounded-full bg-white border border-slate-950 shadow-md`} />
-                <div className={`w-5 h-5 rounded-full bg-white border border-slate-950 -ml-1 shadow-md`} />
+                <div className={`w-5 h-5 rounded-full ${isActive && pointerFlash ? color : 'bg-white'} border border-slate-950 shadow-md`} />
+                <div className={`w-5 h-5 rounded-full ${isActive && pointerFlash ? color : 'bg-white'} border border-slate-950 -ml-1 shadow-md`} />
             </div>
+            
+            {/* Bottom circles */}
             <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[45%] flex gap-[-2px] items-center justify-center">
-                <div className={`w-5 h-5 rounded-full bg-white border border-slate-950 shadow-md`} />
-                <div className={`w-5 h-5 rounded-full bg-white border border-slate-950 -ml-1 shadow-md`} />
+                <div className={`w-5 h-5 rounded-full ${isActive && pointerFlash ? color : 'bg-white'} border border-slate-950 shadow-md`} />
+                <div className={`w-5 h-5 rounded-full ${isActive && pointerFlash ? color : 'bg-white'} border border-slate-950 -ml-1 shadow-md`} />
             </div>
         </motion.div>
     );
 
     const radius = 150;
     const circumference = 2 * Math.PI * radius;
-    const offset = circumference - (flickProgress / 100) * circumference;
+    const offset = Math.max(0, circumference - (flickProgress / 100) * circumference);
 
     return (
         <AnimatePresence>
@@ -416,7 +620,7 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
             <motion.div 
                 ref={containerRef}
                 initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-                className="absolute inset-0 z-50 bg-black/70 backdrop-blur-lg flex flex-col items-center justify-center gap-8 select-none touch-none"
+                className="absolute inset-0 z-50 bg-black/30 backdrop-blur-sm flex flex-col items-center justify-center gap-8 select-none touch-none"
                 onPointerDown={handleInteraction}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
@@ -432,6 +636,36 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                     )}
                 </AnimatePresence>
                 
+                {/* Global Particle Rendering for all minigames that use them */}
+                {reflexParticles.map(p => (
+                    <motion.div 
+                        key={p.id}
+                        initial={{ 
+                            left: `${p.x}%`, 
+                            top: `${p.y}%`, 
+                            opacity: 1, 
+                            scale: p.type === 'ring' ? 0.5 : p.scale,
+                            x: '-50%', 
+                            y: '-50%' 
+                        }}
+                        animate={{ 
+                            left: `${p.tx}%`, 
+                            top: `${p.ty}%`, 
+                            opacity: 0, 
+                            scale: p.type === 'ring' ? p.scale * 2 : 0 
+                        }}
+                        transition={{ duration: p.duration, ease: "easeOut" }}
+                        className={`absolute z-[110] pointer-events-none ${p.type === 'ring' ? 'rounded-full border-2 bg-transparent box-border' : 'rounded-full'}`}
+                        style={{ 
+                            backgroundColor: p.type === 'particle' ? p.color : 'transparent',
+                            borderColor: p.type === 'ring' ? p.color : 'transparent',
+                            boxShadow: p.type === 'particle' ? `0 0 10px ${p.color}` : 'none',
+                            width: p.type === 'ring' ? '80px' : '16px',
+                            height: p.type === 'ring' ? '80px' : '16px',
+                        }}
+                    />
+                ))}
+
                 {activeSkillCheck.type === SkillCheckType.REFLEX ? (
                     <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
                         <div className="absolute top-16 w-full text-center text-white font-tech text-3xl animate-pulse tracking-widest pointer-events-none uppercase drop-shadow-lg">
@@ -447,47 +681,54 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                                         e.preventDefault();
                                         stateRef.current.hitValues.push(t.value);
                                         setReflexTargets(p => p.map(rt => rt.id === t.id ? { ...rt, hit: true } : rt)); 
+                                        
+                                        const totalHits = stateRef.current.hitValues.length;
+                                        const isLast = totalHits === reflexTargets.length;
+                                        
+                                        if (isLast) {
+                                            const totalValue = stateRef.current.hitValues.reduce((a, b) => a + b, 0);
+                                            const avg = totalValue / reflexTargets.length;
+                                            if (avg > 75) {
+                                                spawnPerfectBurst(t.x, t.y, activeSkillCheck.move.type);
+                                            } else {
+                                                spawnReflexPop(t, totalHits);
+                                            }
+                                        } else {
+                                            spawnReflexPop(t, totalHits);
+                                        }
                                     }}
-                                    initial={{ scale: 0, opacity: 0, rotate: t.rotation - 15 }}
+                                    initial={{ scale: 0, opacity: 0, rotate: t.rotation }}
                                     animate={t.hit ? {
-                                        scale: [t.baseScale * 1.2, t.baseScale * 3.0], 
+                                        scale: 1.8, 
                                         opacity: 0, 
-                                        rotate: t.rotation + (activeSkillCheck.move.type === MoveType.HEAL ? 30 : -15),
+                                        filter: "brightness(3)",
                                     } : { 
                                         scale: [t.baseScale, t.baseScale * 1.05, t.baseScale], 
                                         opacity: 1, 
-                                        rotate: t.rotation,
+                                        rotate: [t.rotation - 2, t.rotation + 2, t.rotation - 2],
                                     }}
                                     transition={{ 
-                                        scale: t.hit ? { duration: 0.3, ease: "easeOut" } : { repeat: Infinity, duration: 0.8, ease: "easeInOut" },
-                                        opacity: { duration: 0.3 },
-                                        rotate: { duration: 0.3 }
+                                        scale: t.hit ? { duration: 0.15, ease: "backOut" } : { repeat: Infinity, duration: 1.2, ease: "easeInOut" },
+                                        opacity: { duration: 0.1 },
+                                        rotate: t.hit ? { duration: 0.1 } : { repeat: Infinity, duration: 2.5, ease: "easeInOut" },
+                                        filter: { duration: 0.1 }
                                     }}
-                                    className={`absolute w-[180px] h-[180px] flex items-center justify-center cursor-pointer active:scale-90 bg-transparent touch-none ${t.hit ? 'pointer-events-none' : 'pointer-events-auto'}`}
+                                    className={`absolute w-[110px] h-[110px] flex items-center justify-center cursor-pointer active:scale-95 bg-transparent touch-none ${t.hit ? 'pointer-events-none' : 'pointer-events-auto'}`}
                                     style={{ left: `${t.x}%`, top: `${t.y}%`, transform: 'translate(-50%, -50%)', zIndex: 100 + idx }}
                                 >
                                     <div className="relative pointer-events-none flex items-center justify-center">
-                                        <div className="absolute inset-0 flex items-center justify-center">
-                                            {t.hit && (
-                                                <motion.div 
-                                                    initial={{ scale: 0.2, opacity: 0.8 }}
-                                                    animate={{ scale: 2.5, opacity: 0 }}
-                                                    className="w-full h-full bg-white rounded-full blur-xl mix-blend-screen"
-                                                />
-                                            )}
-                                        </div>
                                         <div className="relative z-10 flex items-center justify-center">
                                             {activeSkillCheck.move.type === MoveType.HEAL ? (
                                                 <Heart 
-                                                    size={128} 
+                                                    size={110} 
                                                     fill={getReflexColor(activeSkillCheck.move.type, t.value)} 
-                                                    className="drop-shadow-[0_0_25px_rgba(255,255,255,0.8)] text-white stroke-[2.5]" 
+                                                    className="drop-shadow-[0_0_15px_rgba(255,255,255,0.7)] text-white stroke-[2]" 
                                                 />
                                             ) : (
                                                 <Shield 
-                                                    size={128} 
+                                                    size={110} 
                                                     fill={getReflexColor(activeSkillCheck.move.type, t.value)} 
-                                                    className="drop-shadow-[0_0_25px_rgba(255,255,255,0.8)] text-white stroke-[2.5]" 
+                                                    className="drop-shadow-[0_0_15px_rgba(255,255,255,0.7)] text-white stroke-[2]" 
                                                 />
                                             )}
                                         </div>
@@ -521,14 +762,51 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                                 </motion.div>
                             ))}
                         </div>
+                        
+                        {!completionRating && (
+                            <div className="absolute bottom-12 z-30 flex flex-col items-center">
+                                <div className="flex items-center gap-2 bg-purple-900/80 px-6 py-2 rounded-full border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.4)] backdrop-blur-md">
+                                    <Bone size={20} className="text-white fill-white" />
+                                    <span className="font-tech text-white text-2xl font-black tracking-widest leading-none pt-1">
+                                        {bones.filter(b => b.collected).length} / {bones.length}
+                                    </span>
+                                </div>
+                                <div className="text-[10px] text-purple-300 font-bold uppercase tracking-widest mt-1 opacity-80">Souls Harvested</div>
+                            </div>
+                        )}
+
                         <AnimatePresence>
                             {completionRating && (
                                 <motion.div initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1.5 }} className="absolute flex flex-col items-center gap-1 z-40 bg-slate-900/90 border-2 border-purple-500/50 px-8 py-4 rounded-3xl backdrop-blur-md shadow-2xl">
                                     <span className={`text-2xl font-tech font-black uppercase tracking-tighter ${completionRating.color} animate-bounce`}>{completionRating.text}</span>
-                                    <div className="flex items-center gap-2 text-white font-mono">
-                                        <Bone size={16} className="text-slate-400" />
-                                        <span className="text-lg font-bold">x{completionRating.mult.toFixed(1)} POWER</span>
-                                    </div>
+                                    {completionRating.drainStats ? (
+                                        <div className="flex items-center gap-8 mt-4">
+                                             <motion.div 
+                                                initial={{ scale: 0, x: -20 }} animate={{ scale: 1, x: 0 }} 
+                                                className="text-6xl font-black text-rose-500 font-mono drop-shadow-[0_0_15px_rgba(244,63,94,0.6)]"
+                                             >
+                                                 -{completionRating.drainStats.damage}
+                                             </motion.div>
+                                             <motion.div 
+                                                initial={{ scale: 0, x: 20 }} animate={{ scale: 1, x: 0 }}
+                                                className="text-6xl font-black text-emerald-400 font-mono drop-shadow-[0_0_15px_rgba(52,211,153,0.6)]"
+                                             >
+                                                 +{completionRating.drainStats.heal}
+                                             </motion.div>
+                                        </div>
+                                    ) : (
+                                        completionRating.details ? (
+                                            <div className="flex flex-col items-center gap-1">
+                                                <div className="text-sm text-purple-200 font-mono font-bold tracking-wider">{completionRating.details}</div>
+                                                <div className="text-[10px] text-purple-400 font-bold uppercase">Total Effect</div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-2 text-white font-mono">
+                                                <Bone size={16} className="text-slate-400" />
+                                                <span className="text-lg font-bold">x{completionRating.mult.toFixed(1)} POWER</span>
+                                            </div>
+                                        )
+                                    )}
                                 </motion.div>
                             )}
                         </AnimatePresence>
@@ -635,25 +913,26 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                         >
                             {activeSkillCheck.type === SkillCheckType.MASH ? (
                                 <div className="h-full relative overflow-hidden">
+                                    {/* MASH Zones */}
+                                    <div className="absolute inset-0 flex h-full w-full pointer-events-none z-0">
+                                        <div className="h-full w-[40%] bg-slate-900 border-r border-slate-800 flex items-center justify-center">
+                                            <span className="text-[10px] text-slate-700 font-black uppercase tracking-widest opacity-50">Weak</span>
+                                        </div>
+                                        <div className="h-full w-[50%] bg-slate-800 border-r border-slate-700 flex items-center justify-center">
+                                            <span className="text-[10px] text-yellow-900 font-black uppercase tracking-widest opacity-50">Good</span>
+                                        </div>
+                                        <div className="h-full w-[10%] bg-slate-700 flex items-center justify-center">
+                                            <span className="text-[10px] text-blue-900 font-black uppercase tracking-widest opacity-50">Max</span>
+                                        </div>
+                                    </div>
+
                                     <motion.div 
-                                        className={`h-full transition-all duration-75 ease-out shadow-[inset_-10px_0_30px_rgba(255,255,255,0.2)]`} 
+                                        className={`h-full transition-all duration-75 ease-out relative z-10 opacity-80`} 
                                         style={{width: `${progress}%`, backgroundColor: getMashColor(progress)}} 
                                         animate={progress >= 100 ? { filter: ["brightness(1)", "brightness(2.5)", "brightness(1)"], x: [0, -6, 6, -6, 6, 0] } : {}}
                                         transition={progress >= 100 ? { repeat: Infinity, duration: 0.08 } : {}}
                                     />
-                                    <div className="absolute right-0 top-0 bottom-0 w-2 bg-emerald-400 animate-pulse shadow-[0_0_20px_#10b981]" />
-                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-white font-tech font-black text-sm tracking-widest opacity-50">MAX</div>
-                                    
-                                    <AnimatePresence>
-                                        {progress >= 100 && (
-                                            <motion.div 
-                                                initial={{ scale: 0, opacity: 1 }}
-                                                animate={{ scale: 3, opacity: 0 }}
-                                                transition={{ duration: 0.4, repeat: Infinity }}
-                                                className="absolute inset-0 bg-white z-[30] pointer-events-none"
-                                            />
-                                        )}
-                                    </AnimatePresence>
+                                    <div className="absolute right-0 top-0 bottom-0 w-2 bg-emerald-400 animate-pulse shadow-[0_0_20px_#10b981] z-20" />
                                 </div>
                             ) : (
                                 <>
@@ -661,19 +940,21 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                                         className={`absolute h-full transition-all duration-150 ${zoneFlash === 'success' ? 'bg-emerald-400 opacity-100 shadow-[0_0_50px_#10b981]' : zoneFlash === 'fail' ? 'bg-rose-500 opacity-100 shadow-[0_0_50px_#f43f5e]' : 'bg-emerald-500/40'} border-x-4 ${zoneFlash === 'success' ? 'border-emerald-200' : zoneFlash === 'fail' ? 'border-rose-200' : 'border-emerald-400/60'}`} 
                                         style={{ left: `${targetZone.start}%`, width: `${targetZone.width}%` }} 
                                     />
-                                    
                                     {tapMarkers.map(m => (
-                                        <motion.div 
-                                            key={m.id} 
-                                            initial={{ opacity: 1, scale: 1 }} 
-                                            animate={{ opacity: 0, scale: 1.1 }} 
-                                            transition={{ duration: 0.4, ease: "easeOut" }}
-                                            className="absolute inset-0 pointer-events-none"
-                                        >
+                                        <motion.div key={m.id} initial={{ opacity: 1, scale: 1 }} animate={{ opacity: 0, scale: 1.1 }} transition={{ duration: 0.4, ease: "easeOut" }} className="absolute inset-0 pointer-events-none">
                                             <BonePointer pos={m.pos} color={m.color} />
                                         </motion.div>
                                     ))}
-                                    
+                                    {zoneBursts.map(b => (
+                                        <motion.div
+                                            key={b.id}
+                                            className="absolute top-0 bottom-0 w-4 z-50 pointer-events-none"
+                                            style={{ left: `${b.left}%`, backgroundColor: b.color, transform: 'translateX(-50%)' }}
+                                            initial={{ scaleX: 1, opacity: 0.8 }}
+                                            animate={{ scaleX: 3, opacity: 0 }}
+                                            transition={{ duration: 0.3 }}
+                                        />
+                                    ))}
                                     <BonePointer pos={progress} color={pointerFlash ? resultColor : 'bg-white'} isActive={true} />
                                 </>
                             )}

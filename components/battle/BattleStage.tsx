@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BattleBird, Rarity, Altitude, EnemyPrefix } from '../../types';
 import { RARITY_CONFIG } from '../../constants';
@@ -7,6 +7,7 @@ import { HealthBar } from '../HealthBar';
 import { StatusBadge } from './BattleUI';
 import { FloatingText, Particle } from './types';
 import { PREFIX_STYLES } from './utils';
+import { Shield, Zap, Activity, Heart } from 'lucide-react';
 
 interface BattleStageProps {
     playerBird: BattleBird;
@@ -16,6 +17,43 @@ interface BattleStageProps {
     floatingTexts: FloatingText[];
     particles: Particle[];
 }
+
+const ShieldOverlay: React.FC<{ startTime: number; duration: number }> = ({ startTime, duration }) => {
+    const [progress, setProgress] = useState(1);
+
+    useEffect(() => {
+        let frame = 0;
+        const update = () => {
+            const elapsed = Date.now() - startTime;
+            const remaining = Math.max(0, duration - elapsed);
+            setProgress(remaining / duration);
+            if (remaining > 0) frame = requestAnimationFrame(update);
+        };
+        frame = requestAnimationFrame(update);
+        return () => cancelAnimationFrame(frame);
+    }, [startTime, duration]);
+
+    return (
+        <div className="absolute inset-0 z-20 pointer-events-none">
+            <svg viewBox="0 0 100 100" className="w-full h-full rotate-[-90deg]">
+                <circle 
+                    cx="50" cy="50" r="48" 
+                    fill="none" 
+                    stroke="rgba(59,130,246,0.3)" 
+                    strokeWidth="4" 
+                />
+                <circle 
+                    cx="50" cy="50" r="48" 
+                    fill="rgba(59,130,246,0.1)" 
+                    stroke="#60a5fa" 
+                    strokeWidth="4"
+                    strokeDasharray={`${progress * 301.6} 301.6`}
+                    className="drop-shadow-[0_0_10px_#60a5fa]"
+                />
+            </svg>
+        </div>
+    );
+};
 
 export const BattleStage: React.FC<BattleStageProps> = ({ 
     playerBird, 
@@ -47,13 +85,19 @@ export const BattleStage: React.FC<BattleStageProps> = ({
                                     }
                                 }}
                             />
+                            {opponentBird.statusEffects.map(effect => {
+                                if (effect.type === 'shield') {
+                                    return <ShieldOverlay key={effect.startTime} startTime={effect.startTime} duration={effect.duration} />;
+                                }
+                                return null;
+                            })}
                         </div>
                         <div className="absolute -right-16 top-0 flex flex-col gap-1 w-24 items-start">
                              <div className={`w-6 h-6 rounded bg-slate-800 border flex items-center justify-center text-[10px] font-bold ${RARITY_CONFIG[opponentBird.rarity].borderColor}`}>
                                  {opponentBird.level}
                              </div>
                              {opponentBird.statusEffects.map((effect, i) => (
-                                 <StatusBadge key={i} type={effect} />
+                                 <StatusBadge key={i} type={effect.type} />
                              ))}
                              {opponentBird.altitude === Altitude.HIGH && (
                                  <StatusBadge type="dodge" /> 
@@ -86,17 +130,37 @@ export const BattleStage: React.FC<BattleStageProps> = ({
                     {floatingTexts.filter(ft => ft.target === 'opponent').map(ft => (
                         <motion.div 
                             key={ft.id} 
-                            initial={{ y: 0, opacity: 0, scale: 0.2 }} 
+                            initial={{ y: ft.y, opacity: 0, scale: 0.5 }} 
                             animate={{ 
-                                y: -120, 
+                                y: ft.y - 80, 
                                 opacity: [0, 1, 1, 0],
-                                scale: [0.5, ft.scale! * 1.5, ft.scale! * 1.0],
+                                scale: [0.5, (ft.scale || 1.2), 1],
                             }} 
-                            transition={{ duration: 2, ease: "easeOut", times: [0, 0.2, 0.7, 1] }}
-                            className={`absolute font-black text-5xl whitespace-nowrap z-50 drop-shadow-[0_4px_4px_rgba(0,0,0,1)] ${ft.color}`} 
-                            style={{ marginLeft: ft.x, WebkitTextStroke: '1px black' }}
+                            transition={{ duration: 1.5, ease: "easeOut", times: [0, 0.1, 0.8, 1] }}
+                            className={`absolute z-50 flex flex-col items-center justify-center ${ft.color}`} 
+                            style={{ marginLeft: ft.x }}
                         >
-                            {ft.text}
+                            {ft.customType === 'rot-eater' ? (
+                                <div className="flex flex-col gap-1 bg-slate-900/90 p-2 rounded-lg border border-slate-700 shadow-xl backdrop-blur-md min-w-[70px]">
+                                     <div className="flex items-center justify-between gap-2">
+                                         <Heart size={14} className="text-emerald-400 fill-emerald-400" />
+                                         <span className="text-emerald-400 font-mono font-bold text-xs">+{ft.text.split(':')[0]}</span>
+                                     </div>
+                                     <div className="flex items-center justify-between gap-2">
+                                         <Zap size={14} className="text-yellow-400 fill-yellow-400" />
+                                         <span className="text-yellow-400 font-mono font-bold text-xs">+{ft.text.split(':')[1]}</span>
+                                     </div>
+                                </div>
+                            ) : ft.icon === 'shield' ? (
+                                <div className="flex items-center gap-2 bg-blue-900/80 px-2 py-1 rounded border border-blue-500/50 shadow-lg backdrop-blur-sm">
+                                    <Shield size={16} className="text-blue-300" />
+                                    <span className="text-blue-100 font-bold font-mono text-sm">-{ft.text}</span>
+                                </div>
+                            ) : (
+                                <div className="font-black text-4xl whitespace-nowrap drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]" style={{ WebkitTextStroke: '1px rgba(0,0,0,0.5)' }}>
+                                    {ft.text}
+                                </div>
+                            )}
                         </motion.div>
                     ))}
                     {particles.map(p => (
@@ -135,10 +199,16 @@ export const BattleStage: React.FC<BattleStageProps> = ({
                                     }
                                 }}
                             />
+                            {playerBird.statusEffects.map(effect => {
+                                if (effect.type === 'shield') {
+                                    return <ShieldOverlay key={effect.startTime} startTime={effect.startTime} duration={effect.duration} />;
+                                }
+                                return null;
+                            })}
                         </div>
                         <div className="absolute -left-20 top-0 flex flex-col gap-1 w-24 items-end">
                              {playerBird.statusEffects.map((effect, i) => (
-                                 <StatusBadge key={i} type={effect} />
+                                 <StatusBadge key={i} type={effect.type} />
                              ))}
                         </div>
                      </div>
@@ -148,17 +218,37 @@ export const BattleStage: React.FC<BattleStageProps> = ({
                     {floatingTexts.filter(ft => ft.target === 'player').map(ft => (
                         <motion.div 
                             key={ft.id} 
-                            initial={{ y: 0, opacity: 0, scale: 0.2 }} 
+                            initial={{ y: ft.y, opacity: 0, scale: 0.5 }} 
                             animate={{ 
-                                y: -120, 
+                                y: ft.y - 80, 
                                 opacity: [0, 1, 1, 0],
-                                scale: [0.5, ft.scale! * 1.5, ft.scale! * 1.0],
+                                scale: [0.5, (ft.scale || 1.2), 1],
                             }} 
-                            transition={{ duration: 2, ease: "easeOut", times: [0, 0.2, 0.7, 1] }}
-                            className={`absolute font-black text-5xl whitespace-nowrap z-50 drop-shadow-[0_4px_4px_rgba(0,0,0,1)] ${ft.color}`} 
-                            style={{ marginLeft: ft.x, WebkitTextStroke: '1px black' }}
+                            transition={{ duration: 1.5, ease: "easeOut", times: [0, 0.1, 0.8, 1] }}
+                            className={`absolute z-50 flex flex-col items-center justify-center ${ft.color}`} 
+                            style={{ marginLeft: ft.x }}
                         >
-                            {ft.text}
+                            {ft.customType === 'rot-eater' ? (
+                                <div className="flex flex-col gap-1 bg-slate-900/90 p-2 rounded-lg border border-slate-700 shadow-xl backdrop-blur-md min-w-[70px]">
+                                     <div className="flex items-center justify-between gap-2">
+                                         <Heart size={14} className="text-emerald-400 fill-emerald-400" />
+                                         <span className="text-emerald-400 font-mono font-bold text-xs">+{ft.text.split(':')[0]}</span>
+                                     </div>
+                                     <div className="flex items-center justify-between gap-2">
+                                         <Zap size={14} className="text-yellow-400 fill-yellow-400" />
+                                         <span className="text-yellow-400 font-mono font-bold text-xs">+{ft.text.split(':')[1]}</span>
+                                     </div>
+                                </div>
+                            ) : ft.icon === 'shield' ? (
+                                <div className="flex items-center gap-2 bg-blue-900/80 px-2 py-1 rounded border border-blue-500/50 shadow-lg backdrop-blur-sm">
+                                    <Shield size={16} className="text-blue-300" />
+                                    <span className="text-blue-100 font-bold font-mono text-sm">-{ft.text}</span>
+                                </div>
+                            ) : (
+                                <div className="font-black text-4xl whitespace-nowrap drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]" style={{ WebkitTextStroke: '1px rgba(0,0,0,0.5)' }}>
+                                    {ft.text}
+                                </div>
+                            )}
                         </motion.div>
                     ))}
                     </AnimatePresence>
