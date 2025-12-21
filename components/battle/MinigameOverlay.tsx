@@ -315,7 +315,7 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
     };
 
     const spawnSuperBurst = (x: number, y: number) => {
-        const newPs = [];
+        const newPs: any[] = [];
         
         // Primary purple burst ring - cleaner, less massive
         newPs.push({
@@ -362,7 +362,7 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         const color = isHeal ? '#34d399' : '#38bdf8'; // Emerald-400 vs Sky-400
         const overrideColor = moveType === MoveType.DRAIN ? '#a855f7' : color;
         
-        const newPs = [];
+        const newPs: any[] = [];
         
         // Big shockwave
         newPs.push({
@@ -410,7 +410,7 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         const color = getReflexColor(activeSkillCheck!.move.type, t.value);
         const intensity = 1 + (index * 0.5);
         
-        const newPs = [];
+        const newPs: any[] = [];
         
         // Burst particles
         const particleCount = 12 + (index * 8);
