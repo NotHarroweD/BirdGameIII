@@ -153,6 +153,14 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
             const update = (prev: any) => prev ? ({ ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + heal) }) : null;
             if (isPlayer) setPlayerBird(update); else setOpponentBird(update);
             spawnFloatingText(`+${heal} HP`, isPlayer ? 'player' : 'opponent', 0, -40, "text-emerald-400", 1.5);
+        } else if (move.type === MoveType.DEFENSE) {
+            const updateDefender = (prev: any) => {
+                if (!prev) return null;
+                const effects = [...prev.statusEffects];
+                if (move.effect === 'dodge' && !effects.includes('dodge')) effects.push('dodge');
+                return { ...prev, statusEffects: effects };
+            };
+            if (isPlayer) setPlayerBird(updateDefender); else setOpponentBird(updateDefender);
         } else {
             const damage = outcome.damage;
             if (move.effect === 'lifesteal' || move.type === MoveType.DRAIN) {
@@ -244,7 +252,13 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
            if (!check) return;
            skillCheckRef.current = null;
            setActiveSkillCheck(null);
-           spawnFloatingText(m >= 1.5 ? "PERFECT!" : "GOOD", 'opponent', -50, -100, m >= 1.5 ? "text-yellow-400" : "text-white", 2);
+           
+           const isSupport = check.move.type === MoveType.HEAL || check.move.type === MoveType.DEFENSE;
+           const targetSide = isSupport ? 'player' : 'opponent';
+           const xPos = isSupport ? 50 : -50;
+           
+           spawnFloatingText(m >= 1.5 ? "PERFECT!" : "GOOD", targetSide, xPos, -100, m >= 1.5 ? "text-yellow-400" : "text-white", 2);
+           
            triggerCooldown(check.move.id, (playerBirdRef.current?.id === 'hummingbird' && m >= 1.5) ? check.move.cooldown / 2 : check.move.cooldown);
            if (playerBirdRef.current && opponentBirdRef.current) executeMove(playerBirdRef.current, opponentBirdRef.current, check.move, true, m, s);
        }} />

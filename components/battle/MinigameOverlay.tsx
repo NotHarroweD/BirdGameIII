@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SkillCheckType, MoveType } from '../../types';
-import { Heart, Shield, Zap, MoveUp, MoveDown, MoveLeft, MoveRight, Bone } from 'lucide-react';
+import { Heart, Shield, Zap, MoveUp, MoveDown, MoveLeft, MoveRight, Bone, Swords } from 'lucide-react';
 import { ActiveSkillCheck, BoneData } from './types';
 import { getReflexColor } from './utils';
 
@@ -17,7 +17,6 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
     const [reflexTargets, setReflexTargets] = useState<any[]>([]);
     const [hitFeedback, setHitFeedback] = useState<any>(null);
     const [targetZone, setTargetZone] = useState({ start: 40, width: 20 });
-    const [overlayParticles, setOverlayParticles] = useState<{ id: number, x: number, y: number, color: string }[]>([]);
     const [cursorPos, setCursorPos] = useState<{ x: number, y: number } | null>(null);
     const [isHolding, setIsHolding] = useState(false);
     const [completionRating, setCompletionRating] = useState<{ text: string, color: string, mult: number } | null>(null);
@@ -28,7 +27,14 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
     const [pointerFlash, setPointerFlash] = useState(false);
     const [resultColor, setResultColor] = useState('bg-white');
 
-    const ratio = bones.length > 0 ? bones.filter(h => h.collected).length / bones.length : 0;
+    const [swipeData, setSwipeData] = useState<{ start: {x: number, y: number}, current: {x: number, y: number} } | null>(null);
+    const [flickProgress, setFlickProgress] = useState(0);
+    const [isFlickSuccess, setIsFlickSuccess] = useState(false);
+    const [targetDirection, setTargetDirection] = useState<{ x: number, y: number, angle: number } | null>(null);
+    const [pastSlashes, setPastSlashes] = useState<{ start: {x: number, y: number}, end: {x: number, y: number}, id: number }[]>([]);
+    
+    const frameRef = useRef<number>(0);
+    const containerRef = useRef<HTMLDivElement>(null);
 
     const stateRef = useRef({
         progress: 0,
@@ -40,12 +46,13 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         startTime: Date.now(),
         isDone: false,
         isPaused: false,
+        stopMovement: false,
         cursorX: 0,
         cursorY: 0,
-        isHolding: false
+        isHolding: false,
+        activeMoveId: '',
+        hitValues: [] as number[]
     });
-
-    const frameRef = useRef<number>(0);
 
     const getMashColor = (p: number) => {
         const hue = (p * 1.2); 
@@ -56,6 +63,9 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         if (!activeSkillCheck) {
             stateRef.current.isDone = false;
             stateRef.current.isPaused = false;
+            stateRef.current.stopMovement = false;
+            stateRef.current.activeMoveId = '';
+            stateRef.current.hitValues = [];
             setCursorPos(null);
             setIsHolding(false);
             setCompletionRating(null);
@@ -65,6 +75,12 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
             setMashFlash(false);
             setPointerFlash(false);
             setResultColor('bg-white');
+            setSwipeData(null);
+            setFlickProgress(0);
+            setIsFlickSuccess(false);
+            setTargetDirection(null);
+            setPastSlashes([]);
+            setReflexTargets([]);
             return;
         }
 
@@ -82,9 +98,12 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
             startTime: Date.now(),
             isDone: false,
             isPaused: false,
+            stopMovement: false,
             cursorX: 0,
             cursorY: 0,
-            isHolding: false
+            isHolding: false,
+            activeMoveId: activeSkillCheck.move.id,
+            hitValues: []
         };
 
         setProgress(0);
@@ -94,12 +113,26 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         setIsHolding(false);
         setCompletionRating(null);
         setTapMarkers([]);
+        setFlickProgress(0);
+        setIsFlickSuccess(false);
+        setPastSlashes([]);
+        setReflexTargets([]); 
+
+        if (activeSkillCheck.type === SkillCheckType.FLICK) {
+            const dirs = [
+                { x: 0, y: -1, angle: 0 },    
+                { x: 1, y: 0, angle: 90 },   
+                { x: 0, y: 1, angle: 180 },  
+                { x: -1, y: 0, angle: 270 }  
+            ];
+            setTargetDirection(dirs[Math.floor(Math.random() * dirs.length)]);
+        }
 
         if (activeSkillCheck.type === SkillCheckType.REFLEX) {
             setReflexTargets([
-                { id: 1, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60, value: 100, hit: false },
-                { id: 2, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60, value: 100, hit: false },
-                { id: 3, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60, value: 100, hit: false }
+                { id: 1, x: 30 + Math.random() * 40, y: 30 + Math.random() * 40, value: 100, hit: false, rotation: (Math.random() - 0.5) * 30, baseScale: 1.0 },
+                { id: 2, x: 30 + Math.random() * 40, y: 30 + Math.random() * 40, value: 100, hit: false, rotation: (Math.random() - 0.5) * 30, baseScale: 1.1 },
+                { id: 3, x: 30 + Math.random() * 40, y: 30 + Math.random() * 40, value: 100, hit: false, rotation: (Math.random() - 0.5) * 30, baseScale: 0.9 }
             ]);
         }
 
@@ -107,11 +140,11 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
             const boneCount = 12;
             const initialBones: BoneData[] = Array.from({ length: boneCount }).map((_, i) => {
                 const angle = (i / boneCount) * Math.PI * 2;
-                const speed = 5 + Math.random() * 2;
+                const speed = 10 + Math.random() * 4;
                 return {
                     id: Date.now() + i,
-                    x: 50 + Math.cos(angle) * 2,
-                    y: 50 + Math.sin(angle) * 2,
+                    x: 50 + Math.cos(angle) * 3,
+                    y: 50 + Math.pow(Math.random(), 0.5) * 40,
                     vx: Math.cos(angle) * speed,
                     vy: Math.sin(angle) * speed,
                     collected: false
@@ -121,40 +154,42 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         }
 
         const update = () => {
-            if (stateRef.current.isDone || stateRef.current.isPaused) {
+            if (stateRef.current.isDone) {
                 frameRef.current = requestAnimationFrame(update);
                 return;
             }
+
+            const isLocked = stateRef.current.isPaused;
             const now = Date.now();
 
             if (activeSkillCheck.type === SkillCheckType.TIMING || activeSkillCheck.type === SkillCheckType.COMBO) {
-                const speed = activeSkillCheck.type === SkillCheckType.COMBO ? (2.8 + stateRef.current.stage * 1.0) : 3.5;
-                
-                let nextP = stateRef.current.progress + (speed * stateRef.current.direction);
-                if (nextP >= 100) {
-                    nextP = 100;
-                    stateRef.current.direction = -1;
-                } else if (nextP <= 0) {
-                    nextP = 0;
-                    stateRef.current.direction = 1;
+                if (!stateRef.current.stopMovement) {
+                    const speed = activeSkillCheck.type === SkillCheckType.COMBO ? (2.8 + stateRef.current.stage * 1.0) : 3.5;
+                    
+                    let nextP = stateRef.current.progress + (speed * stateRef.current.direction);
+                    if (nextP >= 100) {
+                        nextP = 100;
+                        stateRef.current.direction = -1;
+                    } else if (nextP <= 0) {
+                        nextP = 0;
+                        stateRef.current.direction = 1;
+                    }
+                    
+                    stateRef.current.progress = nextP;
+                    setProgress(nextP);
                 }
-                
-                stateRef.current.progress = nextP;
-                setProgress(nextP);
-
-                if (activeSkillCheck.move.id === 'sonic_wave') {
-                    let zp = stateRef.current.targetZone.start + (speed * 0.8 * stateRef.current.direction);
-                    if (zp >= (100 - stateRef.current.targetZone.width)) zp = 100 - stateRef.current.targetZone.width;
-                    if (zp <= 0) zp = 0;
-                    stateRef.current.targetZone.start = zp;
-                    setTargetZone({ ...stateRef.current.targetZone });
-                }
+            } else if (isLocked) {
+                frameRef.current = requestAnimationFrame(update);
+                return;
             } else if (activeSkillCheck.type === SkillCheckType.MASH) {
                 stateRef.current.progress = Math.max(0, stateRef.current.progress - 0.05);
                 setProgress(stateRef.current.progress);
                 if (now - stateRef.current.startTime > 3000) resolve(stateRef.current.progress / 100);
             } else if (activeSkillCheck.type === SkillCheckType.REFLEX) {
-                setReflexTargets(prev => prev.map(t => t.hit ? t : { ...t, value: Math.max(0, t.value - 0.45) }));
+                setReflexTargets(prev => prev.map(t => t.hit ? t : { ...t, value: Math.max(0, t.value - 0.75) }));
+                if (now - stateRef.current.startTime > 5000 && !stateRef.current.isDone) {
+                    resolve(0.5);
+                }
             } else if (activeSkillCheck.type === SkillCheckType.DRAIN_GAME) {
                 setBones(prev => {
                     const isVacuuming = stateRef.current.isHolding;
@@ -169,7 +204,7 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                             const dy = cy - ny;
                             const distSq = dx * dx + dy * dy;
                             if (distSq < 600) {
-                                const force = 0.85;
+                                const force = 0.95;
                                 h.vx += (dx / Math.sqrt(distSq)) * force;
                                 h.vy += (dy / Math.sqrt(distSq)) * force;
                                 h.vx *= 0.85;
@@ -200,6 +235,20 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         return () => cancelAnimationFrame(frameRef.current);
     }, [activeSkillCheck]);
 
+    useEffect(() => {
+        if (activeSkillCheck?.type === SkillCheckType.REFLEX && reflexTargets.length > 0) {
+            const allHit = reflexTargets.every(t => t.hit);
+            if (allHit && !stateRef.current.isDone) {
+                const totalValue = stateRef.current.hitValues.reduce((a, b) => a + b, 0);
+                const avg = totalValue / 3;
+                let finalMult = 1.0;
+                if (avg > 75) finalMult = 1.5;
+                else if (avg > 40) finalMult = 1.2;
+                setTimeout(() => resolve(finalMult), 200);
+            }
+        }
+    }, [reflexTargets, activeSkillCheck]);
+
     const resolve = (mult: number, secMult: number = 0) => {
         if (stateRef.current.isDone) return;
         stateRef.current.isDone = true;
@@ -208,9 +257,11 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
 
     const handleInteraction = (e: React.PointerEvent) => {
         if (!activeSkillCheck || stateRef.current.isDone || stateRef.current.isPaused) return;
-        e.preventDefault();
+
+        if (activeSkillCheck.type === SkillCheckType.REFLEX) return;
         
         if (activeSkillCheck.type === SkillCheckType.MASH) {
+            e.preventDefault();
             setMashFlash(true);
             setTimeout(() => setMashFlash(false), 50);
             stateRef.current.progress = Math.min(100, stateRef.current.progress + 7.5);
@@ -219,11 +270,14 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                 setTimeout(() => resolve(1.5), 250);
             }
         } else if (activeSkillCheck.type === SkillCheckType.TIMING || activeSkillCheck.type === SkillCheckType.COMBO) {
+            e.preventDefault();
             stateRef.current.isPaused = true;
-            const markerPos = activeSkillCheck.move.id === 'sonic_wave' ? 50 : stateRef.current.progress;
             
-            setProgress(markerPos);
-
+            if (activeSkillCheck.type === SkillCheckType.TIMING || stateRef.current.stage === 3) {
+                stateRef.current.stopMovement = true;
+            }
+            
+            const markerPos = stateRef.current.progress;
             const targetMid = stateRef.current.targetZone.start + stateRef.current.targetZone.width / 2;
             const diff = Math.abs(markerPos - targetMid);
             const halfWidth = stateRef.current.targetZone.width / 2;
@@ -272,24 +326,57 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                 }
             }
         } else if (activeSkillCheck.type === SkillCheckType.DRAIN_GAME) {
+            e.preventDefault();
             setIsHolding(true);
             stateRef.current.isHolding = true;
             updateCursorCoords(e);
+        } else if (activeSkillCheck.type === SkillCheckType.FLICK) {
+            e.preventDefault();
+            setSwipeData({ start: { x: e.clientX, y: e.clientY }, current: { x: e.clientX, y: e.clientY } });
         }
     };
 
     const handlePointerMove = (e: React.PointerEvent) => {
-        if (!activeSkillCheck || stateRef.current.isDone || activeSkillCheck.type !== SkillCheckType.DRAIN_GAME) return;
-        updateCursorCoords(e);
+        if (!activeSkillCheck || stateRef.current.isDone) return;
+        
+        if (activeSkillCheck.type === SkillCheckType.DRAIN_GAME) {
+            updateCursorCoords(e);
+        } else if (activeSkillCheck.type === SkillCheckType.FLICK && swipeData && targetDirection && !isFlickSuccess) {
+            const dx = e.clientX - swipeData.start.x;
+            const dy = e.clientY - swipeData.start.y;
+            
+            const dotProduct = (dx * targetDirection.x) + (dy * targetDirection.y);
+            const progress = Math.min(100, Math.max(0, (dotProduct / 250) * 100));
+            setFlickProgress(progress);
+            setSwipeData({ ...swipeData, current: { x: e.clientX, y: e.clientY } });
+            
+            if (progress >= 100) {
+                if (navigator.vibrate) navigator.vibrate([30, 10, 30]);
+                setIsFlickSuccess(true);
+                setScreenFlash(true);
+                setTimeout(() => resolve(2.2), 500);
+            }
+        }
     };
 
     const handlePointerUp = () => {
         setIsHolding(false);
         stateRef.current.isHolding = false;
+        if (activeSkillCheck?.type === SkillCheckType.FLICK && swipeData) {
+            const newSlash = { start: swipeData.start, end: swipeData.current, id: Date.now() };
+            setPastSlashes(prev => [...prev, newSlash]);
+            setTimeout(() => {
+                setPastSlashes(p => p.filter(s => s.id !== newSlash.id));
+            }, 400);
+        }
+        setSwipeData(null);
+        if (!stateRef.current.isDone && !isFlickSuccess) {
+            setFlickProgress(0);
+        }
     };
 
     const updateCursorCoords = (e: React.PointerEvent) => {
-        const container = document.querySelector('.minigame-container');
+        const container = containerRef.current;
         if (container) {
             const rect = container.getBoundingClientRect();
             const xPct = ((e.clientX - rect.left) / rect.width) * 100;
@@ -319,21 +406,26 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
         </motion.div>
     );
 
+    const radius = 150;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - (flickProgress / 100) * circumference;
+
     return (
         <AnimatePresence>
         {activeSkillCheck && (
             <motion.div 
+                ref={containerRef}
                 initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-                className="absolute inset-0 z-50 bg-black/60 backdrop-blur-lg flex flex-col items-center justify-center gap-8 select-none touch-none"
+                className="absolute inset-0 z-50 bg-black/70 backdrop-blur-lg flex flex-col items-center justify-center gap-8 select-none touch-none"
                 onPointerDown={handleInteraction}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerLeave={handlePointerUp}
             >
                 <AnimatePresence>
-                    {screenFlash && activeSkillCheck.type !== SkillCheckType.MASH && (
+                    {screenFlash && (
                         <motion.div 
-                            initial={{opacity: 0.8}} 
+                            initial={{opacity: 0.4}} 
                             animate={{opacity: 0}} 
                             className="absolute inset-0 z-[60] pointer-events-none bg-white" 
                         />
@@ -341,16 +433,68 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                 </AnimatePresence>
                 
                 {activeSkillCheck.type === SkillCheckType.REFLEX ? (
-                    <div className="absolute inset-0 w-full h-full relative">
-                        <div className="absolute top-16 w-full text-center text-white font-tech text-3xl animate-pulse tracking-widest pointer-events-none">TAP TARGETS!</div>
-                        {reflexTargets.map((t) => !t.hit && (
-                            <motion.button key={t.id} onPointerDown={(e) => { e.stopPropagation(); setReflexTargets(p => p.map(rt => rt.id === t.id ? { ...rt, hit: true } : rt)); if (reflexTargets.filter(rt => !rt.hit).length === 1) resolve(1.5); }}
-                                className="absolute w-32 h-32 rounded-full border-[6px] shadow-2xl active:scale-95 flex items-center justify-center"
-                                style={{ left: `${t.x}%`, top: `${t.y}%`, transform: 'translate(-50%, -50%)', borderColor: getReflexColor(activeSkillCheck.move.type, t.value), backgroundColor: 'rgba(0,0,0,0.7)', color: getReflexColor(activeSkillCheck.move.type, t.value) }}>
-                                <div className="absolute inset-0 rounded-full opacity-40" style={{ background: `conic-gradient(${getReflexColor(activeSkillCheck.move.type, t.value)} ${t.value}%, transparent 0)` }} />
-                                {activeSkillCheck.move.type === MoveType.HEAL ? <Heart size={56} fill="currentColor" /> : <Shield size={56} fill="currentColor" />}
-                            </motion.button>
-                        ))}
+                    <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
+                        <div className="absolute top-16 w-full text-center text-white font-tech text-3xl animate-pulse tracking-widest pointer-events-none uppercase drop-shadow-lg">
+                            {activeSkillCheck.move.type === MoveType.HEAL ? "RESTORE VITALITY!" : "STRENGTHEN ARMOR!"}
+                        </div>
+                        <AnimatePresence mode="popLayout">
+                            {reflexTargets.map((t, idx) => (
+                                <motion.div 
+                                    key={`${stateRef.current.activeMoveId}-${t.id}`} 
+                                    onPointerDown={(e) => { 
+                                        if (t.hit || stateRef.current.isDone) return;
+                                        e.stopPropagation(); 
+                                        e.preventDefault();
+                                        stateRef.current.hitValues.push(t.value);
+                                        setReflexTargets(p => p.map(rt => rt.id === t.id ? { ...rt, hit: true } : rt)); 
+                                    }}
+                                    initial={{ scale: 0, opacity: 0, rotate: t.rotation - 15 }}
+                                    animate={t.hit ? {
+                                        scale: [t.baseScale * 1.2, t.baseScale * 3.0], 
+                                        opacity: 0, 
+                                        rotate: t.rotation + (activeSkillCheck.move.type === MoveType.HEAL ? 30 : -15),
+                                    } : { 
+                                        scale: [t.baseScale, t.baseScale * 1.05, t.baseScale], 
+                                        opacity: 1, 
+                                        rotate: t.rotation,
+                                    }}
+                                    transition={{ 
+                                        scale: t.hit ? { duration: 0.3, ease: "easeOut" } : { repeat: Infinity, duration: 0.8, ease: "easeInOut" },
+                                        opacity: { duration: 0.3 },
+                                        rotate: { duration: 0.3 }
+                                    }}
+                                    className={`absolute w-[180px] h-[180px] flex items-center justify-center cursor-pointer active:scale-90 bg-transparent touch-none ${t.hit ? 'pointer-events-none' : 'pointer-events-auto'}`}
+                                    style={{ left: `${t.x}%`, top: `${t.y}%`, transform: 'translate(-50%, -50%)', zIndex: 100 + idx }}
+                                >
+                                    <div className="relative pointer-events-none flex items-center justify-center">
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            {t.hit && (
+                                                <motion.div 
+                                                    initial={{ scale: 0.2, opacity: 0.8 }}
+                                                    animate={{ scale: 2.5, opacity: 0 }}
+                                                    className="w-full h-full bg-white rounded-full blur-xl mix-blend-screen"
+                                                />
+                                            )}
+                                        </div>
+                                        <div className="relative z-10 flex items-center justify-center">
+                                            {activeSkillCheck.move.type === MoveType.HEAL ? (
+                                                <Heart 
+                                                    size={128} 
+                                                    fill={getReflexColor(activeSkillCheck.move.type, t.value)} 
+                                                    className="drop-shadow-[0_0_25px_rgba(255,255,255,0.8)] text-white stroke-[2.5]" 
+                                                />
+                                            ) : (
+                                                <Shield 
+                                                    size={128} 
+                                                    fill={getReflexColor(activeSkillCheck.move.type, t.value)} 
+                                                    className="drop-shadow-[0_0_25px_rgba(255,255,255,0.8)] text-white stroke-[2.5]" 
+                                                />
+                                            )}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
                     </div>
                 ) : activeSkillCheck.type === SkillCheckType.DRAIN_GAME ? (
                     <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center overflow-hidden">
@@ -391,10 +535,78 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                     </div>
                 ) : activeSkillCheck.type === SkillCheckType.FLICK ? (
                     <div className="flex flex-col items-center gap-12 w-full max-w-lg relative">
-                        <div className="text-white font-tech text-4xl font-black animate-pulse uppercase tracking-widest">SWIPE!</div>
-                        <div className="relative w-64 h-64 flex items-center justify-center rounded-full border-4 border-slate-800 bg-slate-900 shadow-2xl">
-                             {activeSkillCheck.move.id === 'sonic_wave' ? <MoveUp size={80} className="text-cyan-400" /> : <Zap size={80} className="text-cyan-400" />}
+                        <div className="text-white font-tech text-4xl font-black animate-pulse uppercase tracking-widest">SONIC SLASH</div>
+                        <div className="relative w-80 h-80 flex items-center justify-center">
+                             <svg viewBox="0 0 320 320" className="absolute inset-0 w-full h-full -rotate-90">
+                                <circle cx="160" cy="160" r={radius} stroke="#1e293b" strokeWidth="16" fill="none" />
+                                <motion.circle 
+                                    cx="160" cy="160" r={radius} 
+                                    stroke={isFlickSuccess ? "#10b981" : "#10b981"} 
+                                    strokeWidth="16" fill="none"
+                                    strokeDasharray={circumference}
+                                    animate={{ 
+                                        strokeDashoffset: isFlickSuccess ? 0 : offset,
+                                        scale: isFlickSuccess ? [1, 1.05, 1] : 1
+                                    }}
+                                    transition={{ duration: 0.1 }}
+                                    strokeLinecap="round"
+                                    className={isFlickSuccess ? "drop-shadow-[0_0_20px_#10b981]" : ""}
+                                />
+                             </svg>
+                             
+                             <div className="relative w-64 h-64 rounded-full flex items-center justify-center bg-slate-900/90 border-4 border-slate-800 shadow-2xl z-10 overflow-hidden">
+                                <motion.div
+                                    animate={isFlickSuccess ? { scale: [1, 1.4, 1], filter: ["brightness(1)", "brightness(2)", "brightness(1)"] } : { scale: 1 }}
+                                    style={{ rotate: targetDirection?.angle || 0 }}
+                                >
+                                    <MoveUp size={120} className={`transition-all duration-300 ${flickProgress >= 100 ? 'text-emerald-400 drop-shadow-[0_0_30px_#10b981]' : 'text-cyan-400'}`} />
+                                </motion.div>
+                             </div>
+
+                             <svg className="fixed inset-0 w-screen h-screen pointer-events-none z-[100] overflow-visible">
+                                <defs>
+                                    <filter id="slash-glow">
+                                        <feGaussianBlur stdDeviation="6" result="coloredBlur" />
+                                        <feMerge>
+                                            <feMergeNode in="coloredBlur" />
+                                            <feMergeNode in="SourceGraphic" />
+                                        </feMerge>
+                                    </filter>
+                                    <linearGradient id="slash-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" stopColor="#22d3ee" stopOpacity="0" />
+                                        <stop offset="50%" stopColor="#22d3ee" stopOpacity="1" />
+                                        <stop offset="100%" stopColor="#fff" stopOpacity="1" />
+                                    </linearGradient>
+                                </defs>
+                                
+                                <AnimatePresence>
+                                    {[...pastSlashes, ...(swipeData ? [{ ...swipeData, id: -1, isCurrent: true }] : [])].map((s: any) => (
+                                        <motion.g 
+                                            key={s.id}
+                                            initial={{ opacity: 1 }}
+                                            animate={{ opacity: s.isCurrent ? 1 : 0 }}
+                                            exit={{ opacity: 0 }}
+                                            transition={{ duration: s.isCurrent ? 0 : 0.4 }}
+                                        >
+                                            {[ -16, 0, 16 ].map((offsetVal, idx) => (
+                                                <g key={idx}>
+                                                    <motion.line 
+                                                        x1={s.start.x + offsetVal} y1={s.start.y} 
+                                                        x2={s.current ? s.current.x + offsetVal : s.end.x + offsetVal} 
+                                                        y2={s.current ? s.current.y + offsetVal : s.end.y + offsetVal} 
+                                                        stroke="url(#slash-grad)" 
+                                                        strokeWidth={idx === 1 ? "12" : "8"} 
+                                                        strokeLinecap="round"
+                                                        filter="url(#slash-glow)"
+                                                    />
+                                                </g>
+                                            ))}
+                                        </motion.g>
+                                    ))}
+                                </AnimatePresence>
+                             </svg>
                         </div>
+                        <div className="mt-4 text-slate-500 font-tech text-xs tracking-[0.3em] animate-pulse uppercase">SLASH IN THE INDICATED DIRECTION</div>
                     </div>
                 ) : (
                     <div className="flex flex-col items-center w-full relative">
@@ -418,28 +630,27 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                         </div>
                         <motion.div 
                             className={`w-[85%] border-4 transition-all duration-150 rounded-2xl relative overflow-visible bg-slate-950 h-28 shadow-2xl ${zoneFlash === 'success' ? 'border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.4)]' : zoneFlash === 'fail' ? 'border-rose-500 shadow-[0_0_30px_rgba(244,63,94,0.4)]' : 'border-slate-700'}`}
-                            animate={activeSkillCheck.type === SkillCheckType.MASH && progress >= 100 ? { scale: [1, 1.05, 1], shadow: "0 0 50px rgba(34,211,238,0.5)" } : {}}
-                            transition={activeSkillCheck.type === SkillCheckType.MASH && progress >= 100 ? { repeat: Infinity, duration: 0.15 } : {}}
+                            animate={activeSkillCheck.type === SkillCheckType.MASH && progress >= 100 ? { scale: [1, 1.15, 1], boxShadow: "0 0 70px rgba(255,255,255,0.8)" } : {}}
+                            transition={activeSkillCheck.type === SkillCheckType.MASH && progress >= 100 ? { repeat: Infinity, duration: 0.1 } : {}}
                         >
                             {activeSkillCheck.type === SkillCheckType.MASH ? (
                                 <div className="h-full relative overflow-hidden">
                                     <motion.div 
                                         className={`h-full transition-all duration-75 ease-out shadow-[inset_-10px_0_30px_rgba(255,255,255,0.2)]`} 
                                         style={{width: `${progress}%`, backgroundColor: getMashColor(progress)}} 
-                                        animate={progress >= 100 ? { filter: ["brightness(1)", "brightness(2)", "brightness(1)"], x: [0, -4, 4, -4, 4, 0] } : {}}
-                                        transition={progress >= 100 ? { repeat: Infinity, duration: 0.1 } : {}}
+                                        animate={progress >= 100 ? { filter: ["brightness(1)", "brightness(2.5)", "brightness(1)"], x: [0, -6, 6, -6, 6, 0] } : {}}
+                                        transition={progress >= 100 ? { repeat: Infinity, duration: 0.08 } : {}}
                                     />
                                     <div className="absolute right-0 top-0 bottom-0 w-2 bg-emerald-400 animate-pulse shadow-[0_0_20px_#10b981]" />
                                     <div className="absolute right-4 top-1/2 -translate-y-1/2 text-white font-tech font-black text-sm tracking-widest opacity-50">MAX</div>
                                     
-                                    {/* Burst Effect */}
                                     <AnimatePresence>
                                         {progress >= 100 && (
                                             <motion.div 
                                                 initial={{ scale: 0, opacity: 1 }}
-                                                animate={{ scale: 2, opacity: 0 }}
-                                                transition={{ duration: 0.5, repeat: Infinity }}
-                                                className="absolute inset-0 bg-white/20 z-[30] pointer-events-none"
+                                                animate={{ scale: 3, opacity: 0 }}
+                                                transition={{ duration: 0.4, repeat: Infinity }}
+                                                className="absolute inset-0 bg-white z-[30] pointer-events-none"
                                             />
                                         )}
                                     </AnimatePresence>
@@ -463,15 +674,11 @@ export const MinigameOverlay: React.FC<MinigameOverlayProps> = ({ activeSkillChe
                                         </motion.div>
                                     ))}
                                     
-                                    {activeSkillCheck.move.id !== 'sonic_wave' && (
-                                        <BonePointer pos={progress} color={pointerFlash ? resultColor : 'bg-white'} isActive={true} />
-                                    )}
-                                    
-                                    {activeSkillCheck.move.id === 'sonic_wave' && <div className="absolute h-full w-3 bg-cyan-400 shadow-[0_0_20px_cyan]" style={{ left: '50%', transform: 'translateX(-50%)' }} />}
+                                    <BonePointer pos={progress} color={pointerFlash ? resultColor : 'bg-white'} isActive={true} />
                                 </>
                             )}
                         </motion.div>
-                        <div className="mt-8 text-slate-500 font-tech text-xs tracking-[0.3em] animate-pulse">TAP ANYWHERE TO HIT</div>
+                        <div className="mt-8 text-slate-500 font-tech text-xs tracking-[0.3em] animate-pulse uppercase">TAP ANYWHERE TO HIT</div>
                     </div>
                 )}
             </motion.div>
